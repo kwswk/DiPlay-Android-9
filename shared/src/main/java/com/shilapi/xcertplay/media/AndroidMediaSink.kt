@@ -862,7 +862,7 @@ private class AudioRenderer(
             )
         }
         track = built
-        trackAttributes = built.audioAttributes
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) trackAttributes = built.audioAttributes
         val capacityBytes = built.bufferSizeInFrames * frameBytes
         startThresholdBytes = MediaAudioBuffer.startBytesFor(plan.startBytes, capacityBytes, PREBUFFER_WRITE_CHUNK_BYTES)
         report("Audio: ready audioType=${format.audioType} codec=${format.codec} " +

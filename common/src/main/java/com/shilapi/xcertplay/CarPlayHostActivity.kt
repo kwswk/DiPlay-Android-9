@@ -57,7 +57,6 @@ import com.shilapi.xcertplay.airplay.CarPlayDisplayScale
 import com.shilapi.xcertplay.airplay.CarPlayUiScale
 import com.shilapi.xcertplay.airplay.AirPlayDisplayConfig
 import com.shilapi.xcertplay.airplay.AirPlayIdentity
-import com.shilapi.xcertplay.airplay.AirPlayIcon
 import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
 import com.shilapi.xcertplay.airplay.AirPlaySafeArea
 import com.shilapi.xcertplay.airplay.AirPlaySession
@@ -2794,39 +2793,9 @@ class CarPlayHostActivity : ComponentActivity() {
             manufacturer = normalizedManufacturer(),
             model = normalizedModel(),
             oemLabel = oemLabel,
-            icons = listOf(loadAirPlayIcon()),
             videoInCar = com.shilapi.xcertplay.hud.BydOutputSettings.videoWhileParked(this),
         )
     }
-
-    private fun loadAirPlayIcon(): AirPlayIcon {
-        val customBytes = try {
-            AirPlayPersistence.loadCustomAirPlayIconFile(this)?.readBytes()
-        } catch (_: Exception) {
-            null
-        }
-        if (customBytes != null) {
-            decodeAirPlayIcon(customBytes)?.let { return it }
-            AirPlayPersistence.clearCustomAirPlayIcon(this)
-        }
-        return decodeAirPlayIcon(defaultAirPlayIconBytes())
-            ?: throw IllegalStateException("Packaged AirPlay icon is invalid")
-    }
-
-    private fun decodeAirPlayIcon(encoded: ByteArray): AirPlayIcon? {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(encoded, 0, encoded.size, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
-            bounds.outWidth != bounds.outHeight
-        ) {
-            return null
-        }
-        return AirPlayIcon(bounds.outWidth, bounds.outHeight, encoded)
-    }
-
-    private fun defaultAirPlayIconBytes(): ByteArray =
-        // Shown in CarPlay's app list as the "back to the car" button.
-        resources.openRawResource(R.raw.ic_car_home).use { it.readBytes() }
 
     private fun updateAirPlayIconPreview() {
         val preview = iconPreviewView ?: return
