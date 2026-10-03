@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [28, 36])
 class DiPlaySettingsNavigationTest {
     @Test fun settingsCategoriesKeepControlsSeparateAndBackReturnsToTheMenu() {
         val context = RuntimeEnvironment.getApplication()
@@ -70,6 +70,56 @@ class DiPlaySettingsNavigationTest {
             activity.onBackPressedDispatcher.onBackPressed()
             activity.onBackPressedDispatcher.onBackPressed()
             assertTrue(contains(R.string.f10_your_phones))
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test @Config(sdk = [28, 36], qualifiers = "w384dp-h853dp-port")
+    fun phoneHomeKeepsEverydayControlsInsideTheScreenAtNormalTextSize() = checkHomeControls(384, 853)
+
+    @Test @Config(sdk = [28, 36], qualifiers = "w853dp-h384dp-land")
+    fun landscapeHomeKeepsEverydayControlsInsideTheScreenAtNormalTextSize() = checkHomeControls(853, 384)
+
+    private fun checkHomeControls(widthDp: Int, heightDp: Int) {
+        val context = RuntimeEnvironment.getApplication()
+        val config = android.content.res.Configuration(context.resources.configuration).apply { fontScale = 1.15f }
+        context.resources.updateConfiguration(config, context.resources.displayMetrics)
+        DiPlayPreferences.saveAutoConnect(context, false)
+        val controller = Robolectric.buildActivity(DiPlayActivity::class.java,
+            Intent(context, DiPlayActivity::class.java).putExtra("page", "home")).setup().visible()
+        val activity = controller.get()
+        try {
+            val root = activity.findViewById<ViewGroup>(android.R.id.content)
+            val density = activity.resources.displayMetrics.density
+            val width = (widthDp * density).toInt()
+            val height = (heightDp * density).toInt()
+            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, width, height)
+            val controls = descendants(root).filterIsInstance<android.widget.Button>().toList()
+            for (resource in listOf(R.string.connect_phone, R.string.settings, R.string.disconnect)) {
+                val control = controls.single { it.text.toString() == activity.getString(resource) }
+                val offset = android.graphics.Rect(0, 0, control.width, control.height)
+                root.offsetDescendantRectToMyCoords(control, offset)
+                assertTrue("${control.text} must be within the phone width: $offset", offset.left >= 0 && offset.right <= width)
+                assertTrue("${control.text} must be above the screen bottom: $offset", offset.top >= 0 && offset.bottom <= height)
+                assertTrue(control.height >= (48 * density).toInt())
+            }
+            if (widthDp > heightDp) {
+                controls.single { it.text.toString() == activity.getString(R.string.settings) }.performClick()
+                val settingsRoot = activity.findViewById<ViewGroup>(android.R.id.content)
+                settingsRoot.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+                settingsRoot.layout(0, 0, width, height)
+                val labels = descendants(settingsRoot).filterIsInstance<TextView>().toList()
+                for (resource in listOf(R.string.connection_setup, R.string.display_and_performance,
+                    R.string.audio_routing, R.string.f10_widgets_language, R.string.f10_privacy, R.string.f10_support)) {
+                    val title = labels.single { it.text.toString() == activity.getString(resource) }
+                    val entry = title.parent.parent as View
+                    val bounds = android.graphics.Rect(0, 0, entry.width, entry.height)
+                    settingsRoot.offsetDescendantRectToMyCoords(entry, bounds)
+                    assertTrue("${title.text} must fit in landscape: $bounds", bounds.left >= 0 && bounds.right <= width && bounds.top >= 0 && bounds.bottom <= height)
+                }
+            }
         } finally { controller.pause().stop().destroy() }
     }
 

@@ -37,6 +37,12 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.ui)
     testImplementation(libs.junit)
     testImplementation("org.robolectric:robolectric:4.17")
 }
+
+// Robolectric Android 16 creates a shared-memory file descriptor through this JDK API.
+tasks.withType<Test>().configureEach { jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED") }

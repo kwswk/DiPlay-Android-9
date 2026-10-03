@@ -47,4 +47,9 @@
     <string name="f10_add_navigation_widget">Add navigation widget</string>
     <string name="f10_audio_auto">Audio · Auto</string>
     <string name="f10_connection_help">Connection help</string>
+    <string name="drive_home_hint">Choose your iPhone. Your next drive starts here.</string>
+    <string name="drive_modern_preset_hint">For newer devices: native resolution, 60 fps, H.264 and 300 ms audio buffering.</string>
+    <string name="drive_enable_bluetooth">Turn on Bluetooth</string>
+    <string name="drive_bluetooth_off">Bluetooth is off</string>
+    <string name="drive_network_short">Wi-Fi details</string>
 </resources>

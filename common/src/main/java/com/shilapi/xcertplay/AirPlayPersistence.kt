@@ -59,10 +59,13 @@ object AirPlayPersistence {
     private const val KEY_FPS = "display_fps"
     private const val KEY_MEDIA_BUFFER_MS = "media_buffer_ms"
     private const val KEY_CLUSTER_MAP = "cluster_map_enabled"
+    private const val KEY_CENTER_MAP_OVERLAY = "center_map_overlay"
+    private const val KEY_LAUNCHER_MAP_SHARING = "launcher_map_sharing"
     private const val KEY_CLUSTER_MAP_SCALE = "cluster_map_scale_percent"
     private const val KEY_CLUSTER_CONTENT = "cluster_content"
     private const val KEY_CLUSTER_MARKER_X = "cluster_marker_horizontal_step"
     private const val KEY_CLUSTER_MARKER_Y = "cluster_marker_vertical_step"
+    private const val KEY_CENTER_MAP_FOLLOWS_DASHBOARD = "center_map_follows_dashboard"
     private const val KEY_WIDTH_PHYSICAL_MM = "display_width_physical_mm"
     private const val KEY_PHYSICAL_SIZE_BASIS = "display_physical_size_basis"
     private const val KEY_MAX_DETECTED_WIDTH = "display_max_detected_width"
@@ -242,7 +245,7 @@ object AirPlayPersistence {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val stored = prefs.getString(KEY_WIRELESS_HOTSPOT_MODE, null)
         val mode = WirelessHotspotMode.entries.firstOrNull { it.name == stored }
-            ?: WirelessHotspotMode.MANUAL
+            ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) WirelessHotspotMode.WIFI_P2P else WirelessHotspotMode.MANUAL
         val supported = if (mode == WirelessHotspotMode.LOCAL_ONLY_HOTSPOT ||
             (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && mode == WirelessHotspotMode.WIFI_P2P)
         ) WirelessHotspotMode.MANUAL else mode
@@ -461,6 +464,32 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CLUSTER_MAP, enabled).apply()
     }
 
+    /** The dashboard map as a card on the centre screen while DiPlay is in the background. */
+    fun loadCenterMapOverlay(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CENTER_MAP_OVERLAY, false)
+
+    /** Other launchers may show the live dashboard map in their own screen (MapEmbedService). */
+    fun loadLauncherMapSharing(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_LAUNCHER_MAP_SHARING, false)
+
+    fun saveLauncherMapSharing(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_LAUNCHER_MAP_SHARING, enabled).apply()
+    }
+
+    /** Observe consent changes for already attached launcher maps; call the returned function to unregister. */
+    internal fun observeLauncherMapSharing(context: Context, changed: (Boolean) -> Unit): () -> Unit {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_LAUNCHER_MAP_SHARING) changed(loadLauncherMapSharing(context))
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    fun saveCenterMapOverlay(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CENTER_MAP_OVERLAY, enabled).apply()
+    }
+
     fun loadClusterContent(context: Context): CarPlayClusterDisplay.Content =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_CLUSTER_CONTENT, null)
             ?.let { name -> CarPlayClusterDisplay.Content.entries.firstOrNull { it.name == name } }
@@ -468,6 +497,15 @@ object AirPlayPersistence {
 
     fun saveClusterContent(context: Context, content: CarPlayClusterDisplay.Content) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_CLUSTER_CONTENT, content.name).apply()
+    }
+
+    fun loadCenterMapFollowsDashboard(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_CENTER_MAP_FOLLOWS_DASHBOARD, true)
+
+    fun saveCenterMapFollowsDashboard(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_CENTER_MAP_FOLLOWS_DASHBOARD, enabled).apply()
     }
 
     fun loadClusterMapScalePercent(context: Context): Int = CarPlayClusterDisplay.STREAM_SCALE_PERCENT.let { default ->

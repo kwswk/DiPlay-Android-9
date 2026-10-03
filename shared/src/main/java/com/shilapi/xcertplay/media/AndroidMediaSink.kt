@@ -166,6 +166,7 @@ class AndroidMediaSink(
     private val onMediaAudioChanged: (Boolean) -> Unit = {},
 ) : MediaSink {
     private val appContext = context?.applicationContext
+    private val audioManager = appContext?.getSystemService(AudioManager::class.java)
     private val audioFocusCoordinator = AudioFocusCoordinator(
         appContext,
         audioFocusEnabled,
@@ -180,10 +181,21 @@ class AndroidMediaSink(
     private val mediaAudioTypes = mutableSetOf<AudioStreamId>()
     private val audioRenderers = ConcurrentHashMap<AudioStreamId, AudioRenderer>()
     private val microphoneUplinks = ConcurrentHashMap<AudioStreamId, MicrophoneUplink>()
+    private val audioModeLock = Any()
+    private var communicationModeStream: AudioStreamId? = null
+    private var savedAudioMode = AudioManager.MODE_NORMAL
+    private var savedCommunicationDevice: AudioDeviceInfo? = null
+    private var communicationDeviceChanged = false
+    private var output = appContext?.let(AudioOutput::load) ?: AudioOutput.SYSTEM
     private val pendingVideoCodec = ConcurrentHashMap<Int, VideoCodec>()
     private val videoRecoveryHandlers = ConcurrentHashMap<Int, () -> Unit>()
     private val videoDiagnosticHandlers = ConcurrentHashMap<Int, (String) -> Unit>()
     private val recoveryPending = AtomicBoolean(false)
+    // Extra decoders draw the same stream on other surfaces, such as the centre card.
+    private val mirrorLock = Any()
+    private val mirrorSurfaces = HashMap<Pair<Int, String>, Surface>()
+    private val mirrorDecoders = HashMap<Pair<Int, String>, VideoDecoder>()
+    private val lastVideoConfig = ConcurrentHashMap<Int, Pair<VideoCodec, ByteArray>>()
     private val recoveryExecutor = Executors.newSingleThreadExecutor { task ->
         Thread(task, "carplay-video-recovery").apply { isDaemon = true }
     }
@@ -216,6 +228,30 @@ class AndroidMediaSink(
         if (surfaces.remove(type, surface)) videoDecoders[type]?.setSurface(null)
     }
 
+    /**
+     * Also decodes stream [type] onto [surface] with its own decoder, one per [key], which
+     * starts at the next keyframe it asks for; null stops it. The stream's own surface is not affected.
+     */
+    fun setMirrorSurface(type: Int, key: String, surface: Surface?) {
+        val id = type to key
+        synchronized(mirrorLock) {
+            mirrorDecoders.remove(id)?.close()
+            if (surface == null) {
+                mirrorSurfaces.remove(id)
+                return
+            }
+            mirrorSurfaces[id] = surface
+        }
+        lastVideoConfig[type]?.let { (codec, data) -> mirrorDecoders(type).forEach { it.configure(codec, data) } }
+    }
+
+    private fun mirrorDecoders(type: Int): List<VideoDecoder> = synchronized(mirrorLock) {
+        if (mirrorSurfaces.isEmpty()) return emptyList()
+        mirrorSurfaces.filterKeys { it.first == type }.map { (id, surface) ->
+            mirrorDecoders.getOrPut(id) { newVideoDecoder(type, surface, " stream=$type mirror=${id.second}") }
+        }
+    }
+
     fun setScreenStreamActiveChangedListener(listener: ((Int, Boolean) -> Unit)?) {
         synchronized(screenStateLock) {
             screenStreamActiveChanged = listener
@@ -229,11 +265,14 @@ class AndroidMediaSink(
 
     override fun onVideoConfig(type: Int, codecData: ByteArray) {
         val codec = pendingVideoCodec[type] ?: VideoCodec.H264
+        lastVideoConfig[type] = codec to codecData
         videoDecoder(type).configure(codec, codecData)
+        mirrorDecoders(type).forEach { it.configure(codec, codecData) }
     }
 
     override fun onVideoFrame(type: Int, naluBytes: ByteArray) {
         videoDecoder(type).submit(naluBytes)
+        mirrorDecoders(type).forEach { it.submit(naluBytes) }
     }
 
     override fun onScreenStreamActive(type: Int, active: Boolean) {
@@ -241,6 +280,10 @@ class AndroidMediaSink(
             videoRecoveryHandlers.remove(type)
             videoDiagnosticHandlers.remove(type)
             videoDecoders.remove(type)?.close()
+            synchronized(mirrorLock) {
+                mirrorDecoders.keys.filter { it.first == type }.forEach { mirrorDecoders.remove(it)?.close() }
+            }
+            lastVideoConfig.remove(type)
             pendingVideoCodec.remove(type)
         }
         synchronized(screenStateLock) {
@@ -273,15 +316,100 @@ class AndroidMediaSink(
     }
 
     override fun onMicrophoneStarted(id: AudioStreamId, config: MicrophoneConfig) {
-        val uplink = microphoneUplinks.computeIfAbsent(id) { MicrophoneUplink(config) }
-        if (!uplink.start()) microphoneUplinks.remove(id, uplink)
+        // This callback runs on the downlink thread; microphone failures must not stop playback.
+        try {
+            if (config.audioType == "telephony") enterCommunicationMode(id)
+            val uplink = microphoneUplinks.computeIfAbsent(id) { MicrophoneUplink(config, onAudioDiagnostic) }
+            if (!uplink.start()) {
+                microphoneUplinks.remove(id, uplink)
+                restoreAudioMode(id)
+            }
+        } catch (error: Exception) {
+            Log.e("xcertplay-usb", "microphone start failed stream=$id", error)
+            MicrophoneCaptureStats.reportStartFailure(config, error, onAudioDiagnostic)
+            onMicrophoneStopped(id)
+        }
     }
 
     override fun onMicrophoneStopped(id: AudioStreamId) {
-        microphoneUplinks.remove(id)?.close()
+        try {
+            microphoneUplinks.remove(id)?.close()
+        } finally {
+            restoreAudioMode(id)
+        }
     }
 
-    fun setAudioOutput(output: String) = audioFocusCoordinator.setOutput(output)
+    private fun enterCommunicationMode(id: AudioStreamId) {
+        val manager = audioManager ?: return
+        synchronized(audioModeLock) {
+            if (communicationModeStream != null) return
+            // Select the HAL communication path before AudioRecord is created.
+            savedAudioMode = manager.mode
+            savedCommunicationDevice = if (Build.VERSION.SDK_INT >= 31) manager.communicationDevice else null
+            manager.mode = AudioManager.MODE_IN_COMMUNICATION
+            communicationModeStream = id
+            routeCall(manager)
+            Log.i("xcertplay-usb", "audio mode $savedAudioMode -> ${manager.mode} for telephony stream=$id")
+        }
+    }
+
+    private fun restoreAudioMode(id: AudioStreamId?) {
+        val manager = audioManager ?: return
+        synchronized(audioModeLock) {
+            val active = communicationModeStream ?: return
+            if (id != null && id != active) return
+            communicationModeStream = null
+            try {
+                if (Build.VERSION.SDK_INT >= 31 && communicationDeviceChanged) {
+                    val previous = savedCommunicationDevice
+                    if (previous == null || !manager.setCommunicationDevice(previous)) manager.clearCommunicationDevice()
+                }
+            } catch (error: RuntimeException) {
+                Log.w("xcertplay-usb", "could not restore communication device", error)
+            } finally {
+                communicationDeviceChanged = false
+                savedCommunicationDevice = null
+                try {
+                    manager.mode = savedAudioMode
+                    Log.i("xcertplay-usb", "audio mode restored to ${manager.mode}")
+                } catch (error: RuntimeException) {
+                    Log.w("xcertplay-usb", "could not restore audio mode $savedAudioMode", error)
+                }
+            }
+        }
+    }
+
+    private fun routeCall(manager: AudioManager) {
+        // Android 12+ chooses the matching microphone with the communication output.
+        // Older head units keep their existing HAL/AudioTrack routing.
+        if (Build.VERSION.SDK_INT < 31) return
+        try {
+            if (output == AudioOutput.SYSTEM) {
+                if (communicationDeviceChanged) manager.clearCommunicationDevice()
+                return
+            }
+            val device = manager.availableCommunicationDevices.firstOrNull {
+                when (output) {
+                    AudioOutput.SPEAKER -> it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                    AudioOutput.BLUETOOTH -> it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                    else -> false
+                }
+            }
+            if (device != null && manager.setCommunicationDevice(device)) communicationDeviceChanged = true
+            else if (communicationDeviceChanged) manager.clearCommunicationDevice()
+        } catch (error: RuntimeException) {
+            Log.w("xcertplay-usb", "communication output unavailable; keeping platform route", error)
+        }
+    }
+
+    fun setAudioOutput(output: String) {
+        audioFocusCoordinator.setOutput(output)
+        synchronized(audioModeLock) {
+            this.output = output
+            if (communicationModeStream != null) audioManager?.let(::routeCall)
+        }
+    }
     fun silenceAudio() = audioFocusCoordinator.silence()
 
     fun close() {
@@ -293,6 +421,11 @@ class AndroidMediaSink(
         }
         videoDecoders.values.forEach(VideoDecoder::close)
         videoDecoders.clear()
+        synchronized(mirrorLock) {
+            mirrorDecoders.values.forEach(VideoDecoder::close)
+            mirrorDecoders.clear()
+            mirrorSurfaces.clear()
+        }
         videoRecoveryHandlers.clear()
         videoDiagnosticHandlers.clear()
         recoveryExecutor.shutdownNow()
@@ -300,22 +433,27 @@ class AndroidMediaSink(
         audioRenderers.clear()
         val hadMedia = synchronized(mediaAudioTypes) { mediaAudioTypes.isNotEmpty().also { mediaAudioTypes.clear() } }
         if (hadMedia) onMediaAudioChanged(false)
-        microphoneUplinks.values.forEach(MicrophoneUplink::close)
-        microphoneUplinks.clear()
+        try {
+            microphoneUplinks.values.forEach(MicrophoneUplink::close)
+        } finally {
+            microphoneUplinks.clear()
+            restoreAudioMode(null)
+        }
     }
 
     private fun videoDecoder(type: Int): VideoDecoder =
-        videoDecoders.computeIfAbsent(type) {
-            VideoDecoder(
-                type,
-                surfaces[type] ?: defaultSurface,
-                videoWidth,
-                videoHeight,
-                preferSoftwareHevcDecoder,
-                requestKeyFrame = { requestVideoRecovery(type) },
-                report = { videoDiagnosticHandlers[type]?.invoke(it) },
-            )
-        }
+        videoDecoders.computeIfAbsent(type) { newVideoDecoder(type, surfaces[type] ?: defaultSurface) }
+
+    private fun newVideoDecoder(type: Int, surface: Surface?, statsLabel: String? = null) = VideoDecoder(
+        type,
+        surface,
+        videoWidth,
+        videoHeight,
+        preferSoftwareHevcDecoder,
+        requestKeyFrame = { requestVideoRecovery(type) },
+        report = { videoDiagnosticHandlers[type]?.invoke(it) },
+        statsLabel = statsLabel,
+    )
 
     @Synchronized
     private fun audioRenderer(id: AudioStreamId, format: AudioFormat): AudioRenderer {
@@ -345,6 +483,7 @@ private class VideoDecoder(
     private val preferSoftwareHevcDecoder: Boolean,
     private val requestKeyFrame: () -> Unit,
     private val report: (String) -> Unit,
+    statsLabel: String? = null,
 ) : Closeable {
     private val queue = VideoDecodeQueue()
     @Volatile private var running = true
@@ -357,7 +496,7 @@ private class VideoDecoder(
     private val referenceChain = VideoReferenceChain()
     private var lastKeyFrameRequestNs = 0L
     // The main screen keeps the historical log format; other screens are labelled.
-    private val stats = VideoStats(if (streamType == 110) "" else " stream=$streamType")
+    private val stats = VideoStats(statsLabel ?: if (streamType == 110) "" else " stream=$streamType")
     private val thread = Thread(::run, "carplay-video").apply { isDaemon = true; start() }
 
     fun configure(codec: VideoCodec, codecData: ByteArray) {

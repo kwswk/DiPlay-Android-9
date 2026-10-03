@@ -25,8 +25,18 @@ class HotspotModeMigrationTest {
         assertEquals("test-password", AirPlayPersistence.loadManualHotspotPassphrase(context))
     }
 
-    @Test fun freshInstallUsesBuiltInHotspot() {
+    @Test fun freshModernInstallUsesWifiDirect() {
         prefs.edit().clear().apply()
+        assertEquals(WirelessHotspotMode.WIFI_P2P, AirPlayPersistence.loadWirelessHotspotMode(context))
+    }
+
+    @Test @Config(sdk = [28]) fun freshAndroid9InstallUsesManualHotspot() {
+        prefs.edit().clear().apply()
+        assertEquals(WirelessHotspotMode.MANUAL, AirPlayPersistence.loadWirelessHotspotMode(context))
+    }
+
+    @Test fun explicitManualChoiceIsPreservedOnNewAndroid() {
+        AirPlayPersistence.saveWirelessHotspotMode(context, WirelessHotspotMode.MANUAL)
         assertEquals(WirelessHotspotMode.MANUAL, AirPlayPersistence.loadWirelessHotspotMode(context))
     }
 

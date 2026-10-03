@@ -1,0 +1,11 @@
+<resources>
+    <color name="drive_background">#F2F4F7</color>
+    <color name="drive_surface">#FFFFFF</color>
+    <color name="drive_border">#D4DAE3</color>
+    <color name="drive_accent">#235BC3</color>
+    <color name="drive_on_accent">#FFFFFF</color>
+    <color name="drive_selected">#E8EFFC</color>
+    <color name="drive_text">#182434</color>
+    <color name="drive_secondary">#536174</color>
+    <color name="drive_warning">#8B4B00</color>
+</resources>

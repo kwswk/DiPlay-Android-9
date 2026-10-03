@@ -39,3 +39,6 @@ dependencies {
     testImplementation libs.junit
     testImplementation 'org.robolectric:robolectric:4.17'
 }
+
+// Robolectric Android 16 creates a shared-memory file descriptor through this JDK API.
+tasks.withType(Test).configureEach { jvmArgs '--add-exports=java.base/jdk.internal.access=ALL-UNNAMED' }
