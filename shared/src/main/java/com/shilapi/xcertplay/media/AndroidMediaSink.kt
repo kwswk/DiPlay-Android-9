@@ -1,6 +1,8 @@
 package com.shilapi.xcertplay.media
 
 import android.content.Context
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioFormat as AndroidAudioFormat
@@ -41,6 +43,28 @@ internal class AudioFocusCoordinator(
 
     private val manager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private val active = LinkedHashMap<AudioTrack, Entry>()
+    private var output = context?.let(AudioOutput::load) ?: AudioOutput.SYSTEM
+    private var silenced = false
+    private var closed = false
+    private val devices = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>) = reroute()
+        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>) = reroute()
+    }
+    init { manager?.registerAudioDeviceCallback(devices, Handler(Looper.getMainLooper())) }
+
+    @Synchronized fun setOutput(value: String) { output = value; reroute() }
+    @Synchronized private fun reroute() {
+        val device = AudioOutput.device(manager, output)
+        active.keys.forEach { track -> runCatching { track.setPreferredDevice(device) } }
+    }
+    @Synchronized fun silence() { silenced = true; setVolume(0f) }
+    @Synchronized fun close() {
+        closed = true
+        manager?.unregisterAudioDeviceCallback(devices)
+        request?.let { manager?.abandonAudioFocusRequest(it) }
+        request = null
+        active.clear()
+    }
     private var request: AudioFocusRequest? = null
     private var requestedChannel: AudioChannel? = null
     private val listener = AudioManager.OnAudioFocusChangeListener { change ->
@@ -57,8 +81,10 @@ internal class AudioFocusCoordinator(
 
     @Synchronized
     fun acquire(track: AudioTrack, channel: AudioChannel, attributes: AudioAttributes) {
-        if (!enabled || manager == null || channel == AudioChannel.NAVIGATION) return
+        if (closed) { track.setVolume(0f); return }
         active[track] = Entry(channel, attributes)
+        track.setPreferredDevice(AudioOutput.device(manager, output))
+        if (silenced) track.setVolume(0f)
         refreshRequest()
     }
 
@@ -68,7 +94,9 @@ internal class AudioFocusCoordinator(
     }
 
     private fun refreshRequest() {
-        val primary = active.values.maxByOrNull { it.channel.focusPriority() }
+        if (!enabled || manager == null) return
+        val primary = active.values.filter { it.channel != AudioChannel.NAVIGATION }
+            .maxByOrNull { it.channel.focusPriority() }
         if (primary == null) {
             request?.let { manager?.abandonAudioFocusRequest(it) }
             request = null
@@ -96,7 +124,7 @@ internal class AudioFocusCoordinator(
     }
 
     private fun setVolume(volume: Float) {
-        active.keys.forEach { track -> runCatching { track.setStereoVolume(volume, volume) } }
+        active.keys.forEach { track -> runCatching { track.setVolume(if (silenced) 0f else volume) } }
     }
 
     private fun AudioChannel.focusPriority(): Int = when (this) {
@@ -253,7 +281,11 @@ class AndroidMediaSink(
         microphoneUplinks.remove(id)?.close()
     }
 
+    fun setAudioOutput(output: String) = audioFocusCoordinator.setOutput(output)
+    fun silenceAudio() = audioFocusCoordinator.silence()
+
     fun close() {
+        audioFocusCoordinator.close()
         synchronized(screenStateLock) {
             activeScreenTypes.forEach { screenStreamActiveChanged?.invoke(it, false) }
             activeScreenTypes.clear()
@@ -888,7 +920,7 @@ private class AudioRenderer(
         )
     }
 
-    /** 0 keeps usage routing; 1-10 selects an Android legacy stream ID. */
+    /** 0 uses usage-based routing; 1–20 attempt legacy stream types supported by the head unit. */
     private fun channelOverride(channel: AudioChannel): Int = when (channel) {
         AudioChannel.MEDIA -> mediaChannel
         AudioChannel.NAVIGATION -> navigationChannel
@@ -941,10 +973,6 @@ private class AudioRenderer(
     private fun requestAudioFocus() {
         val channel = mappedChannel ?: return
         val attributes = trackAttributes ?: return
-        if (channel == AudioChannel.NAVIGATION) {
-            Log.i(TAG, "audio focus skipped channel=NAVIGATION; overlays without ducking")
-            return
-        }
         track?.let { audioFocusCoordinator.acquire(it, channel, attributes) }
     }
 

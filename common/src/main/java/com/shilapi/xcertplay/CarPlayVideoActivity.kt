@@ -149,6 +149,11 @@ class CarPlayVideoActivity : Activity() {
         player?.seekTo(millis.toLong(), MediaPlayer.SEEK_CLOSEST) ?: video.seekTo(millis)
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        CarPlayBackgroundSession.stop()
+    }
+
     override fun onDestroy() {
         main.removeCallbacks(hideControls)
         if (CarPlayVideo.activity === this) {

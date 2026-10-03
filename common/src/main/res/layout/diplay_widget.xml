@@ -1,0 +1,8 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_open" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp"
+    android:background="@drawable/diplay_widget_background" android:contentDescription="@string/f10_widget_description">
+    <ImageView android:layout_width="48dp" android:layout_height="48dp" android:src="@drawable/ic_carplay" android:contentDescription="@null" />
+    <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="12dp"
+        android:text="@string/f10_open_app" android:textColor="#F1F5FC" android:textSize="18sp" android:fontFamily="sans-serif-medium" />
+</LinearLayout>
