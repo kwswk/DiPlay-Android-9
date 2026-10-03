@@ -182,16 +182,22 @@ class DiPlayActivity : ComponentActivity() {
             view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
             insets
         }
-        val content = column().apply { setPadding(dp(if (wideLayout) 32 else 20), dp(16), dp(if (wideLayout) 32 else 20), dp(28)) }
+        val content = column().apply { setPadding(dp(if (wideLayout) 28 else 20), dp(12), dp(if (wideLayout) 28 else 20), dp(24)) }
         scroll.addView(content)
         val header = row().apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(ImageView(this).apply { setImageResource(R.drawable.ic_carplay); contentDescription = getString(R.string.carplay) }, LinearLayout.LayoutParams(dp(28), dp(28)))
+        header.addView(ImageView(this).apply { setImageResource(R.drawable.ic_f10_play); contentDescription = getString(R.string.app_name) }, LinearLayout.LayoutParams(dp(36), dp(36)))
         header.addView(label(getString(R.string.diplay), 24, TEXT, true).apply { setPadding(dp(12), 0, 0, 0); minHeight = dp(56) }, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(button(if (page == "home") getString(R.string.car_home) else getString(R.string.back), false) {
             if (page == "home") CarPlayBackgroundSession.stop { runOnUiThread {
                 startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
             } }
             else { goBack(); render() }
+        }.apply {
+            background = ripple(BG, BG)
+            setTextColor(ACCENT)
+            textSize = 16f
+            minHeight = dp(48)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
         }, LinearLayout.LayoutParams(-2, -2))
         content.addView(header)
         content.addView(space(if (shortLayout) 12 else 22))
@@ -209,11 +215,11 @@ class DiPlayActivity : ComponentActivity() {
 
     private fun home(content: LinearLayout) {
         val wide = wideLayout
-        if (wide && !shortLayout)
-            pageHeading(content, getString(R.string.carplay), getString(R.string.drive_home_hint))
         val phones = card().apply {
-            addView(label(getString(R.string.f10_your_phones), 24, TEXT, true))
-            status = label("", 16, MUTED).also { addView(it, matchButton(4)); it.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+            addView(label(getString(R.string.f10_your_phones), 20, TEXT, true).apply {
+                androidx.core.view.ViewCompat.setAccessibilityHeading(this, true)
+            })
+            addView(space(12))
         }
         val paired = pairedIPhones()
         val list = column()
@@ -234,7 +240,7 @@ class DiPlayActivity : ComponentActivity() {
             list.addView(button(display, false) { selectPhone(device, true) }.apply {
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 isSelected = selected
-                background = ripple(if (selected) SELECTED else BG, if (selected) ACCENT else BORDER)
+                background = ripple(if (selected) SELECTED else SURFACE, if (selected) SELECTED else BORDER)
                 if (selected) setTextColor(ACCENT)
                 contentDescription = if (selected) getString(R.string.f10_selected_phone, display) else display
                 maxLines = 3
@@ -243,16 +249,21 @@ class DiPlayActivity : ComponentActivity() {
         phones.addView(list)
         phones.addView(tile(getString(R.string.f10_pair_device), R.drawable.ic_drive_pair, false) {
             CarPlayBackgroundSession.stop { runOnUiThread { openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } }
-        }.apply { textSize = 17f; background = ripple(BG, BORDER) }, matchButton(12))
+        }.apply { textSize = 16f; setTextColor(ACCENT); background = ripple(SURFACE, BORDER) }, matchButton(12))
         if (wide && !shortLayout) {
         phones.addView(View(this).apply { setBackgroundColor(BORDER) }, LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(10); bottomMargin = dp(14) })
         phones.addView(label(getString(R.string.f10_hotspot), 13, MUTED))
         hotspotInfo = label("", 15, TEXT).also { phones.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) }) }
         }
 
-        connectButton = tile(getString(R.string.connect_phone), R.drawable.ic_dp_connection, true) {
+        connectButton = button(getString(R.string.connect_phone), true) {
             if (CarPlayBackgroundSession.hasSession()) openProjection() else connect(true)
-        }.apply { textSize = if (shortLayout) 26f else 28f; minHeight = dp(if (shortLayout) 100 else if (wide) 144 else 112); setPadding(dp(24), dp(28), dp(24), dp(28)) }
+        }.apply {
+            textSize = 18f
+            minHeight = dp(56)
+            gravity = Gravity.CENTER
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+        }
         disconnectButton = tile(getString(R.string.disconnect), R.drawable.ic_drive_disconnect, false) {
             disconnectButton?.isEnabled = false
             CarPlayBackgroundSession.stop { runOnUiThread { refreshStatus() } }
@@ -261,13 +272,37 @@ class DiPlayActivity : ComponentActivity() {
         val actions = listOf(audioButton,
             tile(getString(if (shortLayout || !wide) R.string.drive_network_short else R.string.f10_network_details), R.drawable.ic_dp_connection, false) { showHotspotDetails() },
             tile(getString(R.string.settings), R.drawable.ic_drive_settings, false) { page = "settings"; render() }, disconnectButton)
+        val connectionCard = card().apply {
+            background = rounded(SELECTED, SELECTED)
+            setPadding(dp(20), dp(if (shortLayout) 16 else 24), dp(20), dp(if (shortLayout) 16 else 24))
+            val summary = column().apply {
+                addView(label(getString(R.string.carplay), if (shortLayout) 22 else 28, TEXT, true).apply {
+                    androidx.core.view.ViewCompat.setAccessibilityHeading(this, true)
+                })
+                status = label("", 14, MUTED).also {
+                    addView(it, matchButton(6))
+                    it.accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+                }
+            }
+            if (shortLayout && wide) {
+                addView(row().apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(summary, LinearLayout.LayoutParams(0, -2, 1f))
+                    addView(connectButton, LinearLayout.LayoutParams(0, -2, 1.2f).apply { marginStart = dp(16) })
+                })
+            } else {
+                addView(summary)
+                addView(connectButton, matchButton(20))
+            }
+        }
         val controls = column().apply {
-            addView(connectButton, matchButton())
+            addView(connectionCard)
             actions.chunked(if (resources.configuration.screenWidthDp >= 360 && resources.configuration.fontScale <= 1.3f) 2 else 1).forEach { tiles ->
                 addView(row().apply {
                     tiles.forEachIndexed { index, tile ->
-                        tile?.minHeight = dp(if (shortLayout) 64 else if (wide) 84 else 64)
-                        if (shortLayout || !wide) tile?.textSize = 16f
+                        tile?.minHeight = dp(if (shortLayout) 60 else if (wide) 76 else 64)
+                        tile?.textSize = 16f
+                        tile?.background = ripple(SURFACE, SURFACE)
                         addView(tile, LinearLayout.LayoutParams(0, -2, 1f).apply { if (index > 0) marginStart = dp(12) })
                     }
                 }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
@@ -334,7 +369,7 @@ class DiPlayActivity : ComponentActivity() {
             entries.chunked(if (shortLayout && wideLayout && resources.configuration.fontScale <= 1.3f) 3 else if (wideLayout) 2 else 1).forEach { entriesInRow ->
                 content.addView(row().apply {
                     entriesInRow.forEachIndexed { index, (key, title, icon) ->
-                        addView(menuEntry(getString(title), getString(hints.getValue(key)), if (shortLayout) null else icon, showHint = !shortLayout) {
+                        addView(menuEntry(getString(title), getString(hints.getValue(key)), icon, showHint = !shortLayout) {
                             page = "settings-$key"; render()
                         }, LinearLayout.LayoutParams(0, -2, 1f).apply { if (index > 0) marginStart = dp(12) })
                     }
@@ -1187,7 +1222,7 @@ class DiPlayActivity : ComponentActivity() {
         }
         audioButton?.text = if (com.shilapi.xcertplay.media.AudioOutput.load(this) == com.shilapi.xcertplay.media.AudioOutput.SYSTEM) getString(R.string.f10_audio_auto) else getString(R.string.f10_audio_label, AudioOutputPicker.label(this))
     }
-    private fun reportFileName() = "DiPlay-${SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())}.txt"
+    private fun reportFileName() = "F10-Play-${SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())}.txt"
 
     private fun chooseReportDestination() {
         // Some head units omit or disable DocumentsUI. Launch itself can throw, before
@@ -1248,7 +1283,7 @@ class DiPlayActivity : ComponentActivity() {
                 if (result.isSuccess) {
                     val savedUri = result.getOrThrow()
                     AlertDialog.Builder(this).setTitle(getString(R.string.diagnostic_report_saved))
-                        .setMessage(if (uri == null) "Downloads/DiPlay/$fileName" else getString(R.string.your_report_was_saved_to_the_selected_location))
+                        .setMessage(if (uri == null) "Downloads/F10 Play/$fileName" else getString(R.string.your_report_was_saved_to_the_selected_location))
                         .setPositiveButton(getString(R.string.done), null)
                         .setNeutralButton(getString(R.string.share)) { _, _ ->
                             runCatching {
@@ -1385,7 +1420,7 @@ class DiPlayActivity : ComponentActivity() {
     }
     private fun toggle(parent: LinearLayout, title: String, description: String, value: Boolean, save: (Boolean) -> Unit) {
         val line = row().apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(12), 0, dp(12)) }
-        val text = column(); text.addView(label(title, 18, TEXT, true)); text.addView(label(description, 14, MUTED).apply { setPadding(0, dp(6), dp(16), 0) })
+        val text = column(); text.addView(label(title, if (shortLayout) 16 else 18, TEXT, true)); text.addView(label(description, 14, MUTED).apply { setPadding(0, dp(6), dp(16), 0) })
         line.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
         line.addView(Switch(this).apply { contentDescription = title; isChecked = value; minHeight = dp(56); buttonTintList = ColorStateList.valueOf(ACCENT); setOnCheckedChangeListener { _, checked -> save(checked) } })
         parent.addView(line)
@@ -1439,8 +1474,8 @@ class DiPlayActivity : ComponentActivity() {
 
     private fun menuEntry(title: String, hint: String, icon: Int?, showHint: Boolean = true, click: () -> Unit) = row().apply {
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(20), dp(12), dp(20), dp(12))
-        background = ripple(SURFACE, BORDER)
+        setPadding(dp(16), dp(16), dp(16), dp(16))
+        background = ripple(SURFACE, SURFACE)
         minimumHeight = dp(if (showHint) 88 else 64)
         isFocusable = true; isClickable = true
         contentDescription = "$title. $hint"
@@ -1449,9 +1484,11 @@ class DiPlayActivity : ComponentActivity() {
         if (icon != null) addView(ImageView(this@DiPlayActivity).apply {
             setImageResource(icon); imageTintList = ColorStateList.valueOf(ACCENT)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(18) })
+            background = rounded(SELECTED, SELECTED)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) })
         addView(column().apply {
-            addView(label(title, 18, TEXT, true))
+            addView(label(title, if (shortLayout) 16 else 18, TEXT, true))
             if (showHint) addView(label(hint, 14, MUTED).apply { setPadding(0, dp(6), 0, 0) })
         }, LinearLayout.LayoutParams(0, -2, 1f))
         addView(label("›", 26, MUTED).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO },
@@ -1468,13 +1505,13 @@ class DiPlayActivity : ComponentActivity() {
         setLineSpacing(dp(3).toFloat(), 1f)
     }
     private fun button(title: String, primary: Boolean, click: () -> Unit) = Button(this).apply {
-        text = title; isAllCaps = false; textSize = 18f; setTextColor(if (primary) ON_ACCENT else TEXT)
+        text = title; isAllCaps = false; textSize = 16f; setTextColor(if (primary) ON_ACCENT else TEXT)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         background = ripple(if (primary) ACCENT else SURFACE, if (primary) ACCENT else BORDER)
         setPadding(dp(18), dp(16), dp(18), dp(16)); minHeight = dp(56); minimumWidth = 0; stateListAnimator = null
         setOnClickListener { click() }
     }
-    private fun rounded(color: Int, stroke: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(20).toFloat(); setStroke(dp(1), stroke) }
+    private fun rounded(color: Int, stroke: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(16).toFloat(); if (color != stroke) setStroke(dp(1), stroke) }
     private fun matchButton(top: Int = 0) = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(top) }
     private fun space(height: Int) = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(height)) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

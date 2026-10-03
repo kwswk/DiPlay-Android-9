@@ -1,6 +1,6 @@
 # DiPlay
 
-This local **DiPlay for F10** fork integrates 0.2.10 with Android 9 compatibility, modern Samsung APIs and an adaptive native UI. See [Samsung / F10 integration and validation](docs/F10-0.2.10-INTEGRATION.md) for device behavior and build results.
+This local **F10 Play** fork integrates 0.2.10 with Android 9 compatibility, modern Samsung APIs and an adaptive native UI. See [Samsung / F10 integration and validation](docs/F10-0.2.10-INTEGRATION.md) for device behavior and build results. See [UI review and proposed additions](docs/F10-PLAY-UX-REVIEW.md) for the next priorities.
 
 **CarPlay for compatible BYD Android head units.** Wired and wireless, with the familiar DiAuto interface. Independent app: `com.shihab.diplay`.
 

@@ -95,7 +95,7 @@ internal object CenterMapOverlay {
                 .coerceIn(0, (screenWidth - width).coerceAtLeast(0))
             y = prefs.getInt(KEY_Y, (96 * metrics.density).toInt())
                 .coerceIn(0, (screenHeight - height).coerceAtLeast(0))
-            title = "DiPlay centre map"
+            title = "F10 Play centre map"
         }
         var surface: Surface? = null
         val video = TextureView(context).apply {

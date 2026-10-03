@@ -13,8 +13,8 @@
     <string name="f10_hotspot_off">Off · tap details to turn on</string>
     <string name="f10_hotspot_saved">Saved hotspot</string>
     <string name="f10_add_widget">Add quick-launch widget</string>
-    <string name="f10_widget_hint">Touch and hold your home screen, choose Widgets, then DiPlay.</string>
-    <string name="f10_widget_description">Open DiPlay and choose your iPhone in one tap.</string>
+    <string name="f10_widget_hint">Touch and hold your home screen, choose Widgets, then F10 Play.</string>
+    <string name="f10_widget_description">Open F10 Play and choose your iPhone in one tap.</string>
     <string name="f10_open_app">Open CarPlay</string>
     <string name="f10_performance">Use balanced preset</string>
     <string name="f10_performance_hint">For the SM-P205: 70% resolution, 30 fps, H.264 and 300 ms audio buffering.</string>
@@ -28,7 +28,7 @@
     <string name="f10_audio_bluetooth">Bluetooth</string>
     <string name="f10_audio_missing">No Bluetooth audio output connected. Connect a speaker or car stereo in Bluetooth settings.</string>
     <string name="f10_audio_hint">Requests this route for music, guidance and Siri. Android or your head unit may override it.</string>
-    <string name="f10_controls">DiPlay controls</string>
+    <string name="f10_controls">F10 Play controls</string>
     <string name="f10_disconnect_home">Disconnect and go back</string>
     <string name="f10_wifi_needed">Turn on Wi-Fi to start wireless CarPlay.</string>
     <string name="f10_your_phones">Your phones</string>
