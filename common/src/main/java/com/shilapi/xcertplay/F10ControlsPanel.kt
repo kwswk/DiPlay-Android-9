@@ -21,6 +21,8 @@ internal class F10ControlsPanel(
     onSettings: () -> Unit,
     onHealth: () -> Unit,
     onDisconnect: () -> Unit,
+    onLyrics: (() -> Unit)? = null,
+    lyricsEnabled: Boolean = false,
 ) : ScrollView(context) {
     val statusView = TextView(context).apply {
         text = status
@@ -48,7 +50,9 @@ internal class F10ControlsPanel(
             R.string.f10_audio_title to onAudio,
             R.string.f10_reconnect to onReconnect,
             R.string.settings to onSettings,
-        )
+        ) + if (onLyrics != null) listOf(
+            (if (lyricsEnabled) R.string.f10_lyrics_hide_panel else R.string.f10_lyrics_show_panel) to onLyrics,
+        ) else emptyList()
         val columns = if (resources.configuration.screenWidthDp >= 600) 2 else 1
         actions.chunked(columns).forEach { group ->
             val row = LinearLayout(context).apply { isBaselineAligned = false }
@@ -60,6 +64,7 @@ internal class F10ControlsPanel(
                         if (index > 0) marginStart = dp(8)
                     })
             }
+            if (group.size < columns) row.addView(android.view.View(context), LinearLayout.LayoutParams(0, 0, 1f))
         }
         val footer = LinearLayout(context).apply { isBaselineAligned = false }
         content.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })

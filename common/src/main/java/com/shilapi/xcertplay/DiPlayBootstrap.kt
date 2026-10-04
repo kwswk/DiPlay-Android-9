@@ -59,4 +59,8 @@ internal object DiPlayPreferences {
     fun saveAutoConnect(context: Context, value: Boolean) {
         prefs(context).edit().putBoolean("auto_connect", value).apply()
     }
+    fun lyricsEnabled(context: Context) = prefs(context).getBoolean("lyrics_panel", false)
+    fun saveLyricsEnabled(context: Context, value: Boolean) {
+        prefs(context).edit().putBoolean("lyrics_panel", value).apply()
+    }
 }

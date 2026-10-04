@@ -391,6 +391,11 @@ class DiPlayActivity : ComponentActivity() {
                 content.addView(button(getString(R.string.connect_with_usb), false) { connect(false) }, matchButton(0))
             }
             "display" -> {
+                section(content, getString(R.string.f10_lyrics_title)) { card ->
+                    toggle(card, getString(R.string.f10_lyrics_show_panel), getString(R.string.f10_lyrics_setting_hint),
+                        DiPlayPreferences.lyricsEnabled(this)) { DiPlayPreferences.saveLyricsEnabled(this, it) }
+                    card.addView(label(getString(R.string.f10_lyrics_provider_hint), 14, MUTED))
+                }
                 section(content, getString(R.string.display_and_performance), R.drawable.ic_dp_display) { card ->
                     card.addView(label(getString(if (Build.VERSION.SDK_INT >= 31) R.string.drive_modern_preset_hint else R.string.f10_performance_hint), 14, MUTED))
                     card.addView(label(getString(R.string.f10_display_saved_local), 14, MUTED))

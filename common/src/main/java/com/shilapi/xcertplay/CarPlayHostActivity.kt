@@ -243,6 +243,8 @@ class CarPlayHostActivity : ComponentActivity() {
         }
 
     private var videoView: TextureView? = null
+    private var projectionLayout: F10ProjectionLayout? = null
+    private var lyricsPanel: F10LyricsPanel? = null
     private var gestureOverlay: View? = null
     private var settingsMenu: View? = null
     private var mfiTargetGroup: RadioGroup? = null
@@ -617,6 +619,10 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        projectionLayout?.lyricsEnabled = DiPlayPreferences.lyricsEnabled(this)
+        projectionLayout?.lyricsOnLeft = AirPlayPersistence.loadRightHandDrive(this)
+        lyricsPanel?.outerEdgeOnLeft = AirPlayPersistence.loadRightHandDrive(this)
+        lyricsPanel?.setForeground(true)
         navigatingWithinApp = false
         val languagePreference = AppLocale.preference(this)
         if (Build.VERSION.SDK_INT < 33 && languagePreference != languagePreferenceAtCreate) {
@@ -812,6 +818,7 @@ class CarPlayHostActivity : ComponentActivity() {
     override fun onStop() {
         // The controller, USB/iAP2 link, and VPN attachment intentionally outlive the UI.
         mainHandler.removeCallbacks(pollConfiguration)
+        lyricsPanel?.setForeground(false)
         super.onStop()
         if (!isFinishing && !isChangingConfigurations) CenterMapOverlay.scheduleShow()
     }
@@ -880,6 +887,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        lyricsPanel?.setForeground(false)
         cancelPendingReconnect()
         controlsDialog?.dismiss()
         controlsDialog = null
@@ -920,8 +928,18 @@ class CarPlayHostActivity : ComponentActivity() {
             isClickable = true
             setOnTouchListener { view, event -> onHostTouch(view, event) }
         }
-        root.addView(video, FrameLayout.LayoutParams(-1, -1))
-        root.addView(gestureLayer, FrameLayout.LayoutParams(-1, -1))
+        val projection = FrameLayout(this).apply {
+            addView(video, FrameLayout.LayoutParams(-1, -1))
+            addView(gestureLayer, FrameLayout.LayoutParams(-1, -1))
+        }
+        val lyrics = F10LyricsPanel(this) { setLyricsEnabled(false) }.apply { outerEdgeOnLeft = rightHandDrive }
+        lyricsPanel = lyrics
+        val layout = F10ProjectionLayout(this, projection, lyrics).apply {
+            lyricsEnabled = DiPlayPreferences.lyricsEnabled(this@CarPlayHostActivity)
+            lyricsOnLeft = rightHandDrive
+        }
+        projectionLayout = layout
+        root.addView(layout, FrameLayout.LayoutParams(-1, -1))
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -1003,13 +1021,23 @@ class CarPlayHostActivity : ComponentActivity() {
             onReconnect = { close(); reconnectNow() },
             onSettings = { close(); showDiPlayHome("settings") },
             onHealth = { close(); ConnectionHealth.show(this) },
-            onDisconnect = { close(); showDiPlayHome() })
+            onDisconnect = { close(); showDiPlayHome() },
+            onLyrics = { close(); setLyricsEnabled(!DiPlayPreferences.lyricsEnabled(this)) },
+            lyricsEnabled = DiPlayPreferences.lyricsEnabled(this))
         controlsPanel = panel
         controlsDialog = android.app.AlertDialog.Builder(this).setView(panel).create().apply {
             setOnDismissListener { controlsPanel = null }
             show()
             window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(32), dp(680)),
                 ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+    }
+
+    private fun setLyricsEnabled(enabled: Boolean) {
+        DiPlayPreferences.saveLyricsEnabled(this, enabled)
+        projectionLayout?.lyricsEnabled = enabled
+        if (enabled && resources.configuration.screenWidthDp < 700) {
+            android.widget.Toast.makeText(this, R.string.f10_lyrics_rotate, android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -3368,7 +3396,8 @@ class CarPlayHostActivity : ComponentActivity() {
         CarPlayMediaKeys.attach(this, next)
         if (airPlayConfig.videoInCar) CarPlayVideo.attach(this, next)
         val display = CarPlaySessionDisplay(airPlayConfig.main.widthPixels, airPlayConfig.main.heightPixels,
-            displayRotation(), hideTopBar, hideBottomBar, size.width, size.height)
+            displayRotation(), hideTopBar, hideBottomBar, size.width, size.height,
+            projectionLayout?.lyricsVisible == true)
         sessionDisplay = display
         videoView?.let { updateVideoLayout(it.width, it.height) }
         CarPlayBackgroundSession.store(next, renderer, size.width, size.height, this, display) { completion ->
@@ -3471,7 +3500,8 @@ class CarPlayHostActivity : ComponentActivity() {
         val display = sessionDisplay ?: return false
         // A narrow window can become taller than it is wide without the screen rotating.
         return display.rotation != displayRotation() ||
-            display.hideTopBar != hideTopBar || display.hideBottomBar != hideBottomBar
+            display.hideTopBar != hideTopBar || display.hideBottomBar != hideBottomBar ||
+            display.lyricsVisible != (projectionLayout?.lyricsVisible == true)
     }
 
     private fun contentRect(viewWidth: Int, viewHeight: Int): CarPlayVideoLayout {
@@ -4005,6 +4035,7 @@ internal data class CarPlaySessionDisplay(
     // Compare unscaled startup window dimensions, not the scaled video canvas.
     val windowWidth: Int,
     val windowHeight: Int,
+    val lyricsVisible: Boolean = false,
 )
 
 /** Process-local hand-off for keeping the CarPlay session alive while no Activity is visible. */

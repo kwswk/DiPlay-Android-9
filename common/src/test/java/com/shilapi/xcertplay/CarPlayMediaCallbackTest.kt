@@ -73,6 +73,29 @@ class CarPlayMediaCallbackTest {
         assertEquals(artwork, metadata.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON))
     }
 
+    @Test @Config(sdk = [28, 36])
+    fun lyricsSnapshotUsesMonotonicPlaybackTimeAndFreezesWhenPaused() {
+        val fields = listOf("nowPlaying", "playbackPositionMillis", "elapsedUpdatedAt").map {
+            CarPlayMediaKeys::class.java.getDeclaredField(it).apply { isAccessible = true }
+        }
+        val saved = fields.map { it.get(CarPlayMediaKeys) }
+        try {
+            val now = android.os.SystemClock.elapsedRealtime()
+            fields[0].set(CarPlayMediaKeys, CarPlayNowPlaying(title = "Song", durationMillis = 4_000, elapsedMillis = 1_000, playing = true))
+            fields[1].set(CarPlayMediaKeys, 1_000L)
+            fields[2].set(CarPlayMediaKeys, now)
+            org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(1_500))
+            assertEquals(2_500L, CarPlayMediaKeys.snapshot().elapsedMillis)
+            fields[0].set(CarPlayMediaKeys, CarPlayMediaKeys.snapshot().copy(playing = false))
+            fields[1].set(CarPlayMediaKeys, 2_500L)
+            fields[2].set(CarPlayMediaKeys, android.os.SystemClock.elapsedRealtime())
+            org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(10))
+            assertEquals(2_500L, CarPlayMediaKeys.snapshot().elapsedMillis)
+            fields[0].set(CarPlayMediaKeys, CarPlayMediaKeys.snapshot().copy(playing = true))
+            assertEquals(4_000L, CarPlayMediaKeys.snapshot().elapsedMillis)
+        } finally { fields.zip(saved).forEach { (field, value) -> field.set(CarPlayMediaKeys, value) } }
+    }
+
     private fun press(keyCode: Int, repeat: Int = 0) {
         for (count in 0..repeat) {
             callback.onMediaButtonEvent(button(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, count)))

@@ -53,6 +53,7 @@ internal object CarPlayMediaKeys {
     private var mediaAudioActive = false
     private var nowPlaying = CarPlayNowPlaying()
     private var elapsedUpdatedAt = 0L
+    private var playbackPositionMillis: Long? = null
     private var artwork: Bitmap? = null
     private val artworkCache = LinkedHashMap<Int, Bitmap?>()
 
@@ -104,7 +105,13 @@ internal object CarPlayMediaKeys {
                         if (artworkCache.containsKey(id)) artworkCache[id] else null
                     }
                 }
-                if (nowPlaying.elapsedMillis != update.elapsedMillis) elapsedUpdatedAt = SystemClock.elapsedRealtime()
+                if (nowPlaying.elapsedMillis != update.elapsedMillis || nowPlaying.playing != update.playing ||
+                    nowPlaying.title != update.title || nowPlaying.artist != update.artist) {
+                    val sameTrack = nowPlaying.title == update.title && nowPlaying.artist == update.artist
+                    playbackPositionMillis = if (sameTrack && nowPlaying.elapsedMillis == update.elapsedMillis)
+                        snapshot().elapsedMillis else update.elapsedMillis
+                    elapsedUpdatedAt = SystemClock.elapsedRealtime()
+                }
                 nowPlaying = update
                 session?.setMetadata(androidMetadata(update, artwork))
                 publishPlaybackStateLocked()
@@ -188,6 +195,8 @@ internal object CarPlayMediaKeys {
         session = null
         mediaAudioActive = false
         nowPlaying = CarPlayNowPlaying()
+        playbackPositionMillis = null
+        elapsedUpdatedAt = 0L
         artwork = null
         artworkCache.clear()
         focusRequest?.let { request -> appContext?.getSystemService(AudioManager::class.java)?.abandonAudioFocusRequest(request) }
@@ -206,7 +215,7 @@ internal object CarPlayMediaKeys {
                 .setActions(ACTIONS)
                 .setState(
                     if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
-                    nowPlaying.elapsedMillis ?: PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                    playbackPositionMillis ?: PlaybackState.PLAYBACK_POSITION_UNKNOWN,
                     if (playing) 1f else 0f,
                     // The iPhone sends elapsed time only on play, pause or seek, so Android must
                     // extrapolate from when it arrived, not from this republish.
@@ -214,6 +223,16 @@ internal object CarPlayMediaKeys {
                 )
                 .build(),
         )
+    }
+
+    /** Read-only lyrics/companion state, using the same monotonic clock as Android's media session. */
+    @Synchronized
+    fun snapshot(): CarPlayNowPlaying {
+        val position = playbackPositionMillis?.let { base ->
+            (base + if (nowPlaying.playing) (SystemClock.elapsedRealtime() - elapsedUpdatedAt).coerceAtLeast(0) else 0)
+                .coerceIn(0, nowPlaying.durationMillis?.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        }
+        return nowPlaying.copy(elapsedMillis = position)
     }
 
     private fun send(index: Int, source: String) {

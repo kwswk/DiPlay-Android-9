@@ -1,0 +1,23 @@
+<resources>
+    <string name="f10_lyrics_title">Lyrics</string>
+    <string name="f10_lyrics_hide">Hide</string>
+    <string name="f10_lyrics_show_panel">Show lyrics panel</string>
+    <string name="f10_lyrics_hide_panel">Hide lyrics panel</string>
+    <string name="f10_lyrics_setting_hint">Passenger-side lyrics in wide landscape. Showing or hiding the panel reconnects CarPlay to fit its new width.</string>
+    <string name="f10_lyrics_provider_hint">Uses LRCLIB and LrcAPI without a Spotify login. Sends song title, artist, album and duration. This Android device needs its own internet connection.</string>
+    <string name="f10_lyrics_rotate">Lyrics will appear in wide landscape. Rotate the device to show the panel.</string>
+    <string name="f10_lyrics_waiting">Play a song on your iPhone</string>
+    <string name="f10_lyrics_loading">Finding lyrics…</string>
+    <string name="f10_lyrics_intro">♪</string>
+    <string name="f10_lyrics_missing">No lyrics found. Try another artist name with Find lyrics.</string>
+    <string name="f10_lyrics_error">Could not load lyrics. Check internet on this Android device, then retry. If the service is busy, try later.</string>
+    <string name="f10_lyrics_instrumental">Instrumental · No lyrics</string>
+    <string name="f10_lyrics_find">Find lyrics</string>
+    <string name="f10_lyrics_retry">Retry</string>
+    <string name="f10_lyrics_choose">Choose lyrics</string>
+    <string name="f10_lyrics_song">Song title</string>
+    <string name="f10_lyrics_artist">Artist</string>
+    <string name="f10_lyrics_search">Search</string>
+    <string name="f10_lyrics_search_again">Search again</string>
+    <string name="f10_lyrics_search_hint">Try the artist’s local name, for example 王傑 instead of Dave Wang. Select the recording that matches your song.</string>
+</resources>

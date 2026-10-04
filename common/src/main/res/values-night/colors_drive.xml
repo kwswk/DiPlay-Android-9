@@ -8,4 +8,5 @@
     <color name="drive_text">#EEF2FA</color>
     <color name="drive_secondary">#B3BFD2</color>
     <color name="drive_warning">#FFCC87</color>
+    <color name="lyrics_active">#9DE4C8</color>
 </resources>

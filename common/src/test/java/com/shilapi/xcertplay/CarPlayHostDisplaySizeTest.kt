@@ -113,6 +113,29 @@ class CarPlayHostDisplaySizeTest {
         assertEquals(1, keepLogs())
     }
 
+    @Test fun hidingLyricsRenegotiatesTheFullProjectionCanvas() {
+        val display = startSession().copy(lyricsVisible = true)
+        setField("sessionDisplay", display)
+        applySize(1920, 990)
+        assertEquals(1, getField("restartGeneration"))
+        assertNull(getField("sessionDisplay"))
+    }
+
+    @Test fun showingLyricsRenegotiatesInsteadOfTreatingItAsACameraShrink() {
+        startSession()
+        val row = F10ProjectionLayout(activity, android.widget.FrameLayout(activity), android.widget.FrameLayout(activity))
+        row.lyricsEnabled = true
+        val density = activity.resources.displayMetrics.density
+        val width = (900 * density).toInt(); val height = (400 * density).toInt()
+        row.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+        row.layout(0, 0, width, height)
+        assertTrue(row.lyricsVisible)
+        setField("projectionLayout", row)
+        applySize(1248, 990)
+        assertEquals(1, getField("restartGeneration"))
+        assertNull(getField("sessionDisplay"))
+    }
+
     @Test fun connectingInANarrowWindowRebuildsWhenTheCameraCloses() {
         startSession(windowWidth = 700)
         applySize(1920, 990)
