@@ -85,7 +85,7 @@ object AirPlayPersistence {
 
     const val DEFAULT_MANUFACTURER = "F10 Play"
     const val DEFAULT_MODEL = "F10 Play"
-    const val DEFAULT_OEM_LABEL = "F10 Play"
+    const val DEFAULT_OEM_LABEL = "F10 Play setting"
     const val DEFAULT_MFI_I2C_PATH = "/dev/i2c-1"
 
     fun loadDisplayScaleTenths(context: Context): Int {
@@ -381,7 +381,7 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_OEM_LABEL, DEFAULT_OEM_LABEL)
             // iOS hides the car icon without a label.
-            .orEmpty().let { if (it.isBlank() || it == "BYD") DEFAULT_OEM_LABEL else it }
+            .orEmpty().let { if (it.isBlank() || it == "BYD" || it == "F10 Play") DEFAULT_OEM_LABEL else it }
 
     fun saveOemLabel(context: Context, oemLabel: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()

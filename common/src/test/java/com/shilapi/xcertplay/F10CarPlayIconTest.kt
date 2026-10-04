@@ -14,7 +14,9 @@ class F10CarPlayIconTest {
     @Test fun legacyLabelMigratesButCustomLabelSurvives() {
         val context = RuntimeEnvironment.getApplication()
         AirPlayPersistence.saveOemLabel(context, "BYD")
-        assertEquals("F10 Play", AirPlayPersistence.loadOemLabel(context))
+        assertEquals("F10 Play setting", AirPlayPersistence.loadOemLabel(context))
+        AirPlayPersistence.saveOemLabel(context, "F10 Play")
+        assertEquals("F10 Play setting", AirPlayPersistence.loadOemLabel(context))
         AirPlayPersistence.saveOemLabel(context, "My car")
         assertEquals("My car", AirPlayPersistence.loadOemLabel(context))
     }

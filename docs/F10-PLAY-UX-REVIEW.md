@@ -44,7 +44,7 @@ These priorities are design judgments based on this app's source and use case. S
 4. **A now-playing home widget.** Reuse the metadata/artwork already integrated from 0.2.10 to show title, artist and playback controls outside projection. The existing navigation and launch widgets remain separate, so users can choose what they need.
 5. **An optional heat notice for long sessions.** If Android reports a sustained thermal problem, offer a lower frame rate with a clear explanation. Start with a notice and an explicit action; do not change streaming settings unexpectedly.
 
-I would ship connection feedback and actual audio output first, then polish the floating controls. The other additions should follow observed daily-use problems. Cloud accounts, social features and another full dashboard would add complexity before they improve the connection experience.
+I would ship connection feedback and actual audio output first, then refine the CarPlay receiver controls. The other additions should follow observed daily-use problems. Cloud accounts, social features and another full dashboard would add complexity before they improve the connection experience.
 
 ## What works
 
@@ -82,4 +82,4 @@ The product's character comes from its driver-oriented connection action and qui
 
 ## CarPlay receiver shortcut
 
-The former BYD receiver shortcut now defaults to F10 Play and advertises the F10 icon. Existing BYD labels migrate on load; custom labels and uploaded icons remain supported. Tapping the shortcut opens the same controls dialog as the floating ⋮ button, without launching Android Home or disconnecting the session. The separate parked-video request retains its existing handler. Reconnect the iPhone after installing to refresh the advertised shortcut.
+The former BYD receiver shortcut now defaults to “F10 Play setting” and advertises the F10 icon. Existing BYD and F10 Play labels migrate on load; custom labels and uploaded icons remain supported. The floating ⋮ button has been removed from projection. Tapping the shortcut opens the controls dialog, without launching Android Home or disconnecting the session. The separate parked-video request retains its existing handler. Reconnect the iPhone after installing to refresh the advertised shortcut.

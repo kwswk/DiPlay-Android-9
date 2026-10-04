@@ -77,30 +77,6 @@ class CarPlayHostDisplaySizeTest {
         assertEquals("The entire startup surface must hide when projection starts", View.GONE, (getField("connectionPanel") as View).visibility)
     }
 
-    @Test @Config(sdk = [28, 36])
-    fun controlsButtonStaysOppositeTheDockForBothDrivingSidesAndRespectsSafeInsets() {
-        CarPlayHostActivity::class.java.getDeclaredMethod("buildContentView")
-            .apply { isAccessible = true }.invoke(activity)
-        val button = getField("controlsButton") as android.widget.Button
-        val insets = androidx.core.view.WindowInsetsCompat.Builder()
-            .setSystemWindowInsets(androidx.core.graphics.Insets.of(24, 10, 36, 0))
-            .setDisplayCutout(androidx.core.view.DisplayCutoutCompat(
-                android.graphics.Rect(24, 10, 36, 0), listOf(android.graphics.Rect(0, 0, 24, 10))))
-            .build()
-        for (rightDrive in listOf(false, true)) {
-            setField("rightHandDrive", rightDrive)
-            CarPlayHostActivity::class.java.getDeclaredMethod("positionControlsButton", androidx.core.view.WindowInsetsCompat::class.java)
-                .apply { isAccessible = true }.invoke(activity, insets)
-            val params = button.layoutParams as android.widget.FrameLayout.LayoutParams
-            val side = params.gravity and android.view.Gravity.HORIZONTAL_GRAVITY_MASK
-            assertEquals(if (rightDrive) android.view.Gravity.LEFT else android.view.Gravity.RIGHT, side)
-            val margin = (8 * activity.resources.displayMetrics.density).toInt()
-            assertEquals(margin + 24, params.leftMargin)
-            assertEquals(margin + 36, params.rightMargin)
-            assertEquals(margin + 10, params.topMargin)
-        }
-    }
-
     @Test fun surroundViewOpenAndCloseKeepsTheNegotiatedCanvas() {
         val display = startSession()
         applySize(1920, 942)

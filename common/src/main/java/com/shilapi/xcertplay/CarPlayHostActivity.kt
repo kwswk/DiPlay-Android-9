@@ -108,7 +108,6 @@ class CarPlayHostActivity : ComponentActivity() {
     )
 
     private var connectionPanel: View? = null
-    private var controlsButton: FloatingControlsButton? = null
     private var wifiRecoveryButton: View? = null
     private var reconnectAttempts = 0
     private lateinit var airPlayIdentity: AirPlayIdentity
@@ -963,23 +962,6 @@ class CarPlayHostActivity : ComponentActivity() {
             insets
         }
         root.addView(panelScroll, FrameLayout.LayoutParams(-1, -1))
-        val controls = FloatingControlsButton(this).apply {
-            text = "⋮"; textSize = 24f; isAllCaps = false
-            contentDescription = getString(R.string.f10_controls)
-            setTextColor(Color.WHITE)
-            background = android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x446F9FD9),
-                GradientDrawable().apply { setColor(0xD9192026.toInt()); cornerRadius = dp(16).toFloat() }, null)
-            setOnClickListener { showF10Controls() }
-        }
-        controlsButton = controls
-        root.addView(controls, FrameLayout.LayoutParams(dp(48), dp(48)))
-        ViewCompat.setOnApplyWindowInsetsListener(controls) { _, insets ->
-            positionControlsButton(insets)
-            insets
-        }
-        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> positionControlsButton() }
-        positionControlsButton()
         videoView = video
         gestureOverlay = gestureLayer
         stageStatusView = stage
@@ -3851,12 +3833,7 @@ class CarPlayHostActivity : ComponentActivity() {
         }
     }
 
-    private fun positionControlsButton(insets: WindowInsetsCompat? = null) {
-        controlsButton?.place(rightHandDrive, insets)
-    }
-
     private fun applyFullscreenMode() {
-        positionControlsButton()
         val hideTop = hideTopBar
         val hideBottom = hideBottomBar
         WindowCompat.setDecorFitsSystemWindows(window, !(hideTop && hideBottom))
