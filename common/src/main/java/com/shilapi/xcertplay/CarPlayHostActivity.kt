@@ -868,6 +868,8 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        controlsDialog?.dismiss()
+        controlsDialog = null
         clusterMonitor?.stop()
         mainHandler.removeCallbacks(hideIdleCenterMap)
         homeMonitor?.stop()
@@ -968,17 +970,7 @@ class CarPlayHostActivity : ComponentActivity() {
             background = android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(0x446F9FD9),
                 GradientDrawable().apply { setColor(0xD9192026.toInt()); cornerRadius = dp(16).toFloat() }, null)
-            setOnClickListener {
-                android.app.AlertDialog.Builder(this@CarPlayHostActivity).setTitle(R.string.f10_controls)
-                    .setItems(arrayOf(getString(R.string.f10_audio_title), getString(R.string.settings),
-                        getString(R.string.f10_disconnect_home))) { _, which ->
-                        when (which) {
-                            0 -> AudioOutputPicker.show(this@CarPlayHostActivity)
-                            1 -> showDiPlayHome("settings")
-                            else -> showDiPlayHome()
-                        }
-                    }.show()
-            }
+            setOnClickListener { showF10Controls() }
         }
         controlsButton = controls
         root.addView(controls, FrameLayout.LayoutParams(dp(48), dp(48)))
@@ -994,6 +986,21 @@ class CarPlayHostActivity : ComponentActivity() {
         connectionPanel = panelScroll
         updateDebugOverlays()
         return root
+    }
+
+    private var controlsDialog: android.app.AlertDialog? = null
+
+    private fun showF10Controls() {
+        if (isFinishing || isDestroyed || controlsDialog?.isShowing == true) return
+        controlsDialog = android.app.AlertDialog.Builder(this).setTitle(R.string.f10_controls)
+            .setItems(arrayOf(getString(R.string.f10_audio_title), getString(R.string.settings),
+                getString(R.string.f10_disconnect_home))) { _, which ->
+                when (which) {
+                    0 -> AudioOutputPicker.show(this)
+                    1 -> showDiPlayHome("settings")
+                    else -> showDiPlayHome()
+                }
+            }.show()
     }
 
     private fun buildSettingsMenu(): View {
@@ -2946,6 +2953,7 @@ class CarPlayHostActivity : ComponentActivity() {
             manufacturer = normalizedManufacturer(),
             model = normalizedModel(),
             oemLabel = oemLabel,
+            icons = listOf(F10CarPlayIcon.load(this)),
             videoInCar = com.shilapi.xcertplay.hud.BydOutputSettings.videoWhileParked(this),
         )
     }
@@ -2960,7 +2968,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 AirPlayPersistence.clearCustomAirPlayIcon(this)
             }
         }
-        val bitmap = customBitmap ?: BitmapFactory.decodeResource(resources, R.raw.placeholder_icon)
+        val bitmap = customBitmap ?: F10CarPlayIcon.defaultBitmap(this)
         preview.setImageBitmap(bitmap)
         iconStatusView?.text =
             if (customBitmap != null) getString(R.string.custom_1_1_icon) else getString(R.string.default_placeholder_icon)
@@ -3124,6 +3132,13 @@ class CarPlayHostActivity : ComponentActivity() {
                     syncAirPlayDarkMode()
                     if (menuOpen) return@runOnUiThread
                     appendLog("AirPlay session active")
+                }
+            }
+
+            override fun onHostUiRequested(session: AirPlaySession) {
+                runOnUiThread {
+                    if (controllerGeneration != restartGeneration || activeAirPlaySession !== session) return@runOnUiThread
+                    showF10Controls()
                 }
             }
 

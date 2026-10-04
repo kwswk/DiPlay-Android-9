@@ -79,3 +79,7 @@ The product's character comes from its driver-oriented connection action and qui
 - Common unit tests, mobile lint and the standalone debug build passed; layout tests cover API 28 and API 36 in portrait and landscape.
 - Physical A5360 dark-mode landscape and SM-P205 light-mode landscape were inspected after installation. Home and settings fit both devices in landscape; the A5360 portrait home was also checked at its existing 1.15 text scale.
 - The icon has separate Android adaptive foreground/background layers and an Android 13+ monochrome layer. No new runtime dependency was added.
+
+## CarPlay receiver shortcut
+
+The former BYD receiver shortcut now defaults to F10 Play and advertises the F10 icon. Existing BYD labels migrate on load; custom labels and uploaded icons remain supported. Tapping the shortcut opens the same controls dialog as the floating ⋮ button, without launching Android Home or disconnecting the session. The separate parked-video request retains its existing handler. Reconnect the iPhone after installing to refresh the advertised shortcut.
