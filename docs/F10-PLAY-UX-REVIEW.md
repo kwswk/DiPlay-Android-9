@@ -83,3 +83,28 @@ The product's character comes from its driver-oriented connection action and qui
 ## CarPlay receiver shortcut
 
 The former BYD receiver shortcut now defaults to “F10 Play setting” and advertises the F10 icon. Existing BYD and F10 Play labels migrate on load; custom labels and uploaded icons remain supported. The floating ⋮ button has been removed from projection. Tapping the shortcut opens the controls dialog, without launching Android Home or disconnecting the session. The separate parked-video request retains its existing handler. Reconnect the iPhone after installing to refresh the advertised shortcut.
+
+## Recovery and controls update
+
+The CarPlay shortcut and three-finger swipe now open a native controls panel with Resume CarPlay, Audio output, Reconnect, Settings, and a separated Disconnect action. Buttons have a minimum 56 dp height. Landscape uses two columns at 600 dp and above; narrow screens stack the actions, with scrolling available for larger text. Existing light/dark semantic colors are retained. No projection overlay button is added.
+
+Connection setup now shows explicit USB, Wi-Fi, permission, pairing, and opening stages. Automatic recovery shows its retry number and countdown. Reconnect uses the existing stack teardown/restart path and cancels a queued automatic retry; repeated taps during teardown are ignored. A successful session cancels pending retries.
+
+Validation: the full common-module suite passes, including API 28/36 control layouts, 1.5× portrait text, short landscape connection layout, and manual retry cancellation. Android lint and the debug APK build pass.
+
+### Performance baseline
+
+Existing VideoStats records received/rendered fps, maximum arrival gap, bitrate, decoder recoveries, and touch-to-frame samples. Audio stats already record packet drops and AudioTrack underruns. Reuse these five-second counters for a 10-minute parked navigation/music run on each device before changing resolution, frame rate, or buffers. A static map may legitimately produce fewer frames; compare received and rendered throughput with animated content. These counters are not an end-to-end dropped-frame measurement.
+
+At implementation time the A5360 was available without an active CarPlay stream and the P205 was disconnected. No live streaming baseline or performance improvement is claimed. Current display preferences remain unchanged unless a profile is selected. Android 9 recommends 70% resolution / 30 fps; modern devices recommend native / 60 fps. These are starting profiles, not measured performance guarantees.
+
+### Complete follow-up
+
+- **Audio:** Audio output and Connection health show the active AudioTrack route separately from the saved preference; idle playback is explicitly unknown. Missing selected outputs show an actionable explanation.
+- **Display profiles:** Recommended is device-specific; Light and Smooth remain available on either device. Preferences stay local. After the first rendered video frame, the captured display settings become the restore point; changing preferences alone cannot overwrite it. Restore covers resolution, fps, codec/software-decoder choice, UI scale, and physical display width. It confirms video rendering, not prolonged stability.
+- **Connection health:** available from the controls panel and Settings → Help/support → Diagnostics. Shows attempt/reconnect counts, first-picture timing, latest video sample, cumulative audio packet drops/underruns for the attempt, sample age, battery temperature, and Android thermal-throttling warnings where supported. Counters live in memory for this app process; exported reports include them. No live samples is distinct from zero errors.
+- **Controls access:** CarPlay shortcut, three-finger swipe, or a keyboard/head-unit Menu key. The projection overlay button remains removed.
+
+The shared test suite has 390 passes and one existing host-network skip; the final 37 targeted common tests pass after the full common suite passed. No physical streaming benchmark is claimed without an iPhone session.
+
+Physical UI verification on SM-A5360: all six controls are visible in landscape, portrait is usable, and Connection health correctly identifies absent live media. Temporary rotation overrides were restored after the check. The P205 was disconnected; API 28 coverage is automated rather than a physical install of this update.

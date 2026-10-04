@@ -393,15 +393,24 @@ class DiPlayActivity : ComponentActivity() {
             "display" -> {
                 section(content, getString(R.string.display_and_performance), R.drawable.ic_dp_display) { card ->
                     card.addView(label(getString(if (Build.VERSION.SDK_INT >= 31) R.string.drive_modern_preset_hint else R.string.f10_performance_hint), 14, MUTED))
-                    card.addView(button(getString(R.string.f10_performance), false) {
-                        AirPlayPersistence.saveDisplayScaleTenths(this, if (Build.VERSION.SDK_INT >= 31) 10 else 7)
-                        AirPlayPersistence.saveFps(this, if (Build.VERSION.SDK_INT >= 31) 60 else 30)
-                        AirPlayPersistence.saveMediaBufferMillis(this, com.shilapi.xcertplay.media.MediaAudioBuffer.DEFAULT_MILLIS)
-                        AirPlayPersistence.saveHevcEnabled(this, false)
-                        AirPlayPersistence.saveHevcSoftwareDecoderEnabled(this, false)
-                        toast(getString(R.string.saved_for_your_next_connection))
-                        render()
+                    card.addView(label(getString(R.string.f10_display_saved_local), 14, MUTED))
+                    card.addView(button(getString(R.string.f10_profile_recommended, Build.MODEL), false) {
+                        F10DisplayProfile.recommended(this).apply(this)
+                        toast(getString(R.string.saved_for_your_next_connection)); render()
                     }, matchButton(10))
+                    card.addView(button(getString(R.string.f10_profile_light), false) {
+                        F10DisplayProfile.current(this).copy(scale = 7, fps = 30, hevc = false, softwareHevc = false).apply(this)
+                        toast(getString(R.string.saved_for_your_next_connection)); render()
+                    }, matchButton(10))
+                    card.addView(button(getString(R.string.f10_profile_smooth), false) {
+                        F10DisplayProfile.current(this).copy(scale = 10, fps = 60, hevc = false, softwareHevc = false).apply(this)
+                        toast(getString(R.string.saved_for_your_next_connection)); render()
+                    }, matchButton(10))
+                    card.addView(button(getString(R.string.f10_restore_display), false) {
+                        F10DisplayProfile.working(this)?.apply(this)
+                        toast(getString(R.string.saved_for_your_next_connection)); render()
+                    }.apply { isEnabled = F10DisplayProfile.working(this@DiPlayActivity) != null }, matchButton(10))
+                    if (F10DisplayProfile.working(this) == null) card.addView(label(getString(R.string.f10_no_working_display), 14, MUTED))
                     card.addView(space(12))
                     carPlaySizeControl(card)
                     val scales = listOf(10, 8, 7, 6)
@@ -415,7 +424,7 @@ class DiPlayActivity : ComponentActivity() {
                 }
             }
             "audio" -> {
-                content.addView(menuEntry(getString(R.string.f10_audio_title), AudioOutputPicker.label(this), R.drawable.ic_drive_audio) {
+                content.addView(menuEntry(getString(R.string.f10_audio_title), AudioOutputPicker.status(this), R.drawable.ic_drive_audio) {
                     AudioOutputPicker.show(this) { render() }
                 }, matchButton(0))
                 content.addView(space(16))
@@ -470,6 +479,7 @@ class DiPlayActivity : ComponentActivity() {
                     card.addView(button(getString(R.string.wireless_connection_help), false) { wirelessHelp() }, matchButton(10))
                 }
                 section(content, getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+                    card.addView(button(getString(R.string.f10_health), false) { ConnectionHealth.show(this) }, matchButton(10))
                     exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) exportDiagnostics()
                         else chooseReportDestination()
@@ -1243,7 +1253,8 @@ class DiPlayActivity : ComponentActivity() {
         Thread({
             val result = runCatching {
                 val report = buildString {
-                    appendLine("DiPlay ${version()} · private beta diagnostic report")
+                    appendLine("F10 Play ${version()} · private beta diagnostic report")
+                    appendLine(ConnectionHealth.report(appContext))
                     appendLine("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
                     appendLine("Head unit: ${Build.MANUFACTURER} ${Build.MODEL}")
                     appendLine("Connection: ${if (AirPlayPersistence.loadWirelessEnabled(appContext)) "wireless" else "USB"}")

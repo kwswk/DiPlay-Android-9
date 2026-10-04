@@ -218,7 +218,7 @@
     <string name="i2c_device_path_is_required">I2C device path is required</string>
     <string name="identity_appearance">Identity &amp; appearance</string>
     <string name="image_is_not_ready">Image is not ready</string>
-    <string name="in_carplay_swipe_down_with_three_fingers_to_open_diplay_se">In CarPlay, swipe down with three fingers to open F10 Play settings.</string>
+    <string name="in_carplay_swipe_down_with_three_fingers_to_open_diplay_se">In CarPlay, swipe down with three fingers to open F10 Play controls.</string>
     <string name="instrument_contrast">Instrument contrast</string>
     <string name="instrument_theme">Instrument theme</string>
     <string name="keep_bluetooth_and_wi_fi_on_your_iphone_pair_with_the_car">Keep Bluetooth and Wi-Fi on your iPhone. Pair with the car’s Bluetooth, then select your iPhone here. Allow Nearby devices when asked.</string>

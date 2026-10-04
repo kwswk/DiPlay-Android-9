@@ -349,6 +349,11 @@ class CarPlayHostActivity : ComponentActivity() {
     private var startAfterHandshakeReset = false
     private var restartGeneration = 0
     private var reconnectScheduled = false
+    private var pendingReconnect: Runnable? = null
+    private var connectionSummary = ""
+    private var controlsPanel: F10ControlsPanel? = null
+    private var healthAttempt = 0
+    private var pendingDisplayProfile: F10DisplayProfile? = null
     private var sessionLog: SessionLogFile? = null
     private var gestureSequenceActive = false
     private var gestureTracking = false
@@ -771,6 +776,10 @@ class CarPlayHostActivity : ComponentActivity() {
 
     // The steering-wheel voice key reaches the focused window; while CarPlay is on screen it opens Siri.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_MENU) {
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) showF10Controls()
+            return true
+        }
         if (!CarPlayMediaButton.opensSiri(event.keyCode)) return super.dispatchKeyEvent(event)
         if (event.action == KeyEvent.ACTION_UP) {
             val sent = controller?.requestSiri() == true
@@ -857,6 +866,10 @@ class CarPlayHostActivity : ComponentActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         refreshConfiguration(newConfig)
+        if (controlsDialog?.isShowing == true) {
+            controlsDialog?.dismiss()
+            showF10Controls()
+        }
         applyFullscreenMode()
         stageStatusView?.maxWidth = (resources.displayMetrics.widthPixels * 0.78f).toInt()
         scrollLogsToBottom()
@@ -867,6 +880,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        cancelPendingReconnect()
         controlsDialog?.dismiss()
         controlsDialog = null
         clusterMonitor?.stop()
@@ -940,12 +954,18 @@ class CarPlayHostActivity : ComponentActivity() {
             setOnClickListener { showDiPlayHome("wireless-recovery") }
             wifiRecoveryButton = this
         }, LinearLayout.LayoutParams(dp(300), ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
-        panel.addView(Button(this).apply {
+        val connectionActions = LinearLayout(this).apply { isBaselineAligned = false }
+        panel.addView(connectionActions, LinearLayout.LayoutParams(-1, -2))
+        connectionActions.addView(Button(this).apply {
+            text = getString(R.string.f10_reconnect); isAllCaps = false; textSize = 18f; minHeight = dp(56)
+            setOnClickListener { reconnectNow() }
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(8) })
+        connectionActions.addView(Button(this).apply {
             text = getString(R.string.back_to_diplay); isAllCaps = false; textSize = 18f; minHeight = dp(56)
             setTextColor(getColor(R.color.drive_on_accent))
             background = GradientDrawable().apply { setColor(getColor(R.color.drive_accent)); cornerRadius = dp(20).toFloat() }
             setOnClickListener { showDiPlayHome() }
-        }, LinearLayout.LayoutParams(dp(300), ViewGroup.LayoutParams.WRAP_CONTENT))
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         panel.addView(TextView(this).apply {
             text = getString(R.string.in_carplay_swipe_down_with_three_fingers_to_open_diplay_se)
             textSize = 13f; gravity = Gravity.CENTER; setTextColor(getColor(R.color.drive_secondary)); setPadding(0, dp(8), 0, 0)
@@ -974,15 +994,36 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun showF10Controls() {
         if (isFinishing || isDestroyed || controlsDialog?.isShowing == true) return
-        controlsDialog = android.app.AlertDialog.Builder(this).setTitle(R.string.f10_controls)
-            .setItems(arrayOf(getString(R.string.f10_audio_title), getString(R.string.settings),
-                getString(R.string.f10_disconnect_home))) { _, which ->
-                when (which) {
-                    0 -> AudioOutputPicker.show(this)
-                    1 -> showDiPlayHome("settings")
-                    else -> showDiPlayHome()
-                }
-            }.show()
+        fun close() { controlsDialog?.dismiss() }
+        val panel = F10ControlsPanel(this,
+            if (activeScreenStreamTypes.isNotEmpty()) getString(R.string.f10_connected)
+            else connectionSummary.ifEmpty { getString(R.string.f10_preparing_connection) },
+            onResume = { close() },
+            onAudio = { close(); AudioOutputPicker.show(this) },
+            onReconnect = { close(); reconnectNow() },
+            onSettings = { close(); showDiPlayHome("settings") },
+            onHealth = { close(); ConnectionHealth.show(this) },
+            onDisconnect = { close(); showDiPlayHome() })
+        controlsPanel = panel
+        controlsDialog = android.app.AlertDialog.Builder(this).setView(panel).create().apply {
+            setOnDismissListener { controlsPanel = null }
+            show()
+            window?.setLayout(minOf(resources.displayMetrics.widthPixels - dp(32), dp(680)),
+                ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+    }
+
+    private fun reconnectNow() {
+        if (handshakeResetInProgress || shuttingDown.get()) return
+        reconnectAttempts = 0
+        wifiRecoveryButton?.visibility = View.GONE
+        restartCarPlay(getString(R.string.f10_reconnect_starting))
+    }
+
+    private fun cancelPendingReconnect() {
+        pendingReconnect?.let(mainHandler::removeCallbacks)
+        pendingReconnect = null
+        reconnectScheduled = false
     }
 
     private fun buildSettingsMenu(): View {
@@ -3066,6 +3107,7 @@ class CarPlayHostActivity : ComponentActivity() {
     ): AndroidMediaSink {
         // Capture this session's log: late decoder shutdown must not write into a new session.
         val diagnosticLog = sessionLog
+        val metricsToken = healthAttempt
         return AndroidMediaSink(
             surface = null,
             videoWidth = videoWidth,
@@ -3082,6 +3124,7 @@ class CarPlayHostActivity : ComponentActivity() {
             },
             mediaBufferMillis = AirPlayPersistence.loadMediaBufferMillis(this),
             onAudioDiagnostic = { message ->
+                ConnectionHealth.record(metricsToken, message)
                 if (message.startsWith("Microphone: ")) {
                     AsyncDiagnosticLog.append(diagnosticLog, message)
                 } else {
@@ -3110,6 +3153,7 @@ class CarPlayHostActivity : ComponentActivity() {
                     }
                     activeAirPlaySession = session
                     CarPlayBackgroundSession.active = true
+                    cancelPendingReconnect()
                     reconnectAttempts = 0
                     syncAirPlayDarkMode()
                     if (menuOpen) return@runOnUiThread
@@ -3161,6 +3205,10 @@ class CarPlayHostActivity : ComponentActivity() {
                     if (controllerGeneration != restartGeneration) {
                         return@runOnUiThread
                     }
+                    if (ConnectionHealth.record(healthAttempt, message)) {
+                        pendingDisplayProfile?.markWorking(this@CarPlayHostActivity)
+                        pendingDisplayProfile = null
+                    }
                     DisplayDiagnosticSnapshot.record(this@CarPlayHostActivity, displayDiagnosticAttempt, message)
                     if (menuOpen) return@runOnUiThread
                     if (message.startsWith(PROTOCOL_TRACE_PREFIX)) {
@@ -3179,7 +3227,7 @@ class CarPlayHostActivity : ComponentActivity() {
             updateHotspotStatus(status)
             if (status is CarPlayStatus.HotspotReady) CarPlayBackgroundSession.hotspot = status
             val description = status.describe()
-            setConnectionStage(description)
+            setConnectionStage(description, status.connectionLabel())
             when (status) {
                 is CarPlayStatus.Failed -> if (status.wifiResetRequired) {
                     wifiRecoveryButton?.visibility = View.VISIBLE
@@ -3198,6 +3246,7 @@ class CarPlayHostActivity : ComponentActivity() {
             CarPlayBackgroundSession.clear(snapshot.controller)
             return false
         }
+        healthAttempt = ConnectionHealth.token()
         displayDiagnosticAttempt = DisplayDiagnosticSnapshot.currentAttempt(this)
         controller = snapshot.controller
         sink = snapshot.sink
@@ -3245,6 +3294,8 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun startCarPlay(size: DisplaySize) {
         if (CarPlayBackgroundSession.hasSession() && !CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress || controller != null) return
+        healthAttempt = ConnectionHealth.begin()
+        pendingDisplayProfile = F10DisplayProfile.current(this)
         val controllerGeneration = restartGeneration
         val config = createRuntimeConfig()
         val airPlayConfig = createAirPlayConfig(size)
@@ -3484,21 +3535,27 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         reconnectAttempts += 1
         appendLog("$reason; retrying in ${delayMillis}ms")
-        mainHandler.postDelayed(
-            {
-                reconnectScheduled = false
-                if (
-                    shuttingDown.get() ||
-                    menuOpen ||
-                    handshakeResetInProgress ||
-                    generation != restartGeneration
-                ) {
-                    return@postDelayed
+        val deadline = android.os.SystemClock.elapsedRealtime() + delayMillis
+        val retry = object : Runnable {
+            override fun run() {
+                if (pendingReconnect !== this) return
+                if (shuttingDown.get() || menuOpen || handshakeResetInProgress || generation != restartGeneration) {
+                    cancelPendingReconnect()
+                    return
                 }
-                restartCarPlay("Reconnecting after $reason")
-            },
-            delayMillis,
-        )
+                val remaining = deadline - android.os.SystemClock.elapsedRealtime()
+                if (remaining <= 0) {
+                    cancelPendingReconnect()
+                    restartCarPlay(getString(R.string.f10_reconnect_starting))
+                } else {
+                    setConnectionStage(reason, getString(R.string.f10_retry_countdown,
+                        reconnectAttempts, ((remaining + 999) / 1000).toInt()))
+                    mainHandler.postDelayed(this, minOf(remaining, 1000))
+                }
+            }
+        }
+        pendingReconnect = retry
+        retry.run()
     }
 
     /** Full-stack fallback when an AirPlay-only reconnect is unavailable. */
@@ -3506,6 +3563,8 @@ class CarPlayHostActivity : ComponentActivity() {
         if (!CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress) return
         val size = activeDisplaySize ?: return
+        cancelPendingReconnect()
+        ConnectionHealth.reconnect()
         appendLog(reason)
         activeScreenStreamTypes.clear()
         setConnectionStage(reason)
@@ -3559,7 +3618,7 @@ class CarPlayHostActivity : ComponentActivity() {
         } }
     }
 
-    private fun openSettingsMenu() = showDiPlayHome("settings")
+    private fun openSettingsMenu() = showF10Controls()
 
     private fun saveSettingsAndReconnect() {
         if (!menuOpen) return
@@ -3757,9 +3816,11 @@ class CarPlayHostActivity : ComponentActivity() {
         }
     }
 
-    private fun setConnectionStage(message: String) {
+    private fun setConnectionStage(message: String, label: String = friendlyStage(message)) {
         latestStage = message
-        stageStatusView?.text = friendlyStage(message)
+        connectionSummary = label
+        stageStatusView?.text = label
+        controlsPanel?.statusView?.text = label
         updateDebugOverlays()
     }
 
@@ -3853,6 +3914,21 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun CarPlayStatus.connectionLabel(): String {
+        if (this is CarPlayStatus.Failed) return friendlyStage(describe())
+        return getString(when (this) {
+            CarPlayStatus.StartingHotspot -> R.string.f10_starting_wifi
+            is CarPlayStatus.HotspotReady, CarPlayStatus.WaitingForPairedIphone -> R.string.f10_waiting_wireless
+            CarPlayStatus.DiscoveringIphone, CarPlayStatus.WaitingForIphone -> R.string.f10_waiting_usb
+            CarPlayStatus.RequestingIphonePermission, CarPlayStatus.RequestingMfiPermission -> R.string.f10_allow_usb
+            CarPlayStatus.Pairing, CarPlayStatus.ConnectingBluetooth -> R.string.f10_pairing
+            CarPlayStatus.RunningWireless, CarPlayStatus.WirelessActive, CarPlayStatus.RunningControl,
+            CarPlayStatus.ConnectingControl, CarPlayStatus.AttachingNetwork -> R.string.f10_opening_carplay
+            CarPlayStatus.ControlEnded -> R.string.f10_reconnect_starting
+            else -> R.string.f10_preparing_connection
+        })
+    }
 
     private fun CarPlayStatus.describe(): String = when (this) {
         CarPlayStatus.DiscoveringMfi -> getString(R.string.preparing_mfi_authentication)

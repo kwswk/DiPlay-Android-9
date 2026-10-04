@@ -66,7 +66,9 @@ class CarPlayHostDisplaySizeTest {
         root.layout(0, 0, width, height)
         val scroll = getField("connectionPanel") as android.widget.ScrollView
         val panel = scroll.getChildAt(0) as android.view.ViewGroup
-        val back = (0 until panel.childCount).map { panel.getChildAt(it) }
+        val actions = (0 until panel.childCount).map { panel.getChildAt(it) }
+            .filterIsInstance<android.widget.LinearLayout>().last()
+        val back = (0 until actions.childCount).map { actions.getChildAt(it) }
             .filterIsInstance<android.widget.Button>()
             .single { it.text.toString() == activity.getString(com.shilapi.xcertplay.host.R.string.back_to_diplay) }
         val bounds = android.graphics.Rect(0, 0, back.width, back.height)
@@ -75,6 +77,21 @@ class CarPlayHostDisplaySizeTest {
         assertTrue(back.height >= (48 * density).toInt())
         scroll.visibility = View.GONE
         assertEquals("The entire startup surface must hide when projection starts", View.GONE, (getField("connectionPanel") as View).visibility)
+    }
+
+    @Test fun manualReconnectCancelsTheScheduledAutomaticRetry() {
+        startSession()
+        activity.javaClass.getDeclaredMethod("reconnectAfterLoss", String::class.java)
+            .apply { isAccessible = true }.invoke(activity, "Connection interrupted")
+        assertEquals(true, getField("reconnectScheduled"))
+        assertTrue((getField("connectionSummary") as String).contains("Retry 1"))
+        activity.javaClass.getDeclaredMethod("reconnectNow")
+            .apply { isAccessible = true }.invoke(activity)
+        assertEquals(false, getField("reconnectScheduled"))
+        assertNull(getField("pendingReconnect"))
+        assertEquals(1, getField("restartGeneration"))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(31))
+        assertEquals(1, getField("restartGeneration"))
     }
 
     @Test fun surroundViewOpenAndCloseKeepsTheNegotiatedCanvas() {

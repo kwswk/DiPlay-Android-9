@@ -410,6 +410,8 @@ class AndroidMediaSink(
             if (communicationModeStream != null) audioManager?.let(::routeCall)
         }
     }
+    fun activeAudioDeviceTypes(): List<Int> = audioRenderers.values.mapNotNull { it.routedDeviceType() }.distinct()
+
     fun silenceAudio() = audioFocusCoordinator.silence()
 
     fun close() {
@@ -854,7 +856,11 @@ private class AudioRenderer(
     @Volatile private var running = true
     @Volatile private var started = false
     private var codec: MediaCodec? = null
-    private var track: AudioTrack? = null
+    @Volatile private var track: AudioTrack? = null
+
+    fun routedDeviceType(): Int? = runCatching {
+        track?.takeIf { it.playState == AudioTrack.PLAYSTATE_PLAYING }?.routedDevice?.type
+    }.getOrNull()
     private var pcm = ByteArray(64 * 1024)
     private var playbackStarted = false
     private var prebufferBytes = 0
