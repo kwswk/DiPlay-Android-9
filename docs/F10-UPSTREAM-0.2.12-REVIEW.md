@@ -58,10 +58,14 @@ claim that those issues were resolved in 0.2.12.
 ## Validation
 
 - Shared suite: 418 cases, 417 passed and one existing skipped case; no failures.
+  Includes microphone routing on API 28 and API 36.
 - Affected host, controls, media metadata, lyrics, USB-filter and settings-resume
-  suite: 55 passed, including API 28/36 microphone routing and host settings tests.
+  suite: 55 passed, including host settings tests on API 28 and API 36.
 - Debug APK assembly and Android lint passed; lint reports 18 warnings and no errors.
 - Public-tree credential check and whitespace/conflict checks passed.
 - APK version code 35. No claim of a complete upstream 0.2.12 upgrade.
-- The A5360 disconnected from USB before microphone installation/testing. Physical
-  Siri and Google Maps recognition remains to be verified on the final build.
+- Installed version code 35 successfully on the A5360 and verified that microphone
+  permission is granted. Restored the temporary system rotation overrides used
+  during landscape testing. The device then disconnected from ADB before live
+  diagnostics could be collected. Siri and Google Maps recognition remains to be
+  verified on the final build.
