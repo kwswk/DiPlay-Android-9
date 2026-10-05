@@ -316,10 +316,10 @@ class AndroidMediaSink(
     }
 
     override fun onMicrophoneStarted(id: AudioStreamId, config: MicrophoneConfig) {
-        // This callback runs on the downlink thread; microphone failures must not stop playback.
+        // Microphone failures must not stop the CarPlay session or speaker playback.
         try {
             if (config.audioType == "telephony") enterCommunicationMode(id)
-            val uplink = microphoneUplinks.computeIfAbsent(id) { MicrophoneUplink(config, onAudioDiagnostic) }
+            val uplink = microphoneUplinks.computeIfAbsent(id) { MicrophoneUplink(config, onAudioDiagnostic, audioManager) }
             if (!uplink.start()) {
                 microphoneUplinks.remove(id, uplink)
                 restoreAudioMode(id)

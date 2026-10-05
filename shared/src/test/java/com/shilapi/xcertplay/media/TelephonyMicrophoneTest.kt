@@ -33,6 +33,7 @@ import org.robolectric.shadows.ShadowAudioEffect
 import org.robolectric.shadows.ShadowAudioManager
 import org.robolectric.shadows.ShadowAudioRecord
 import org.robolectric.shadows.ShadowLog
+import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE, shadows = [TelephonyMicrophoneTest.ConfigurableAudioEffect::class])
@@ -99,6 +100,28 @@ class TelephonyMicrophoneTest {
         assertEquals(AudioManager.MODE_NORMAL, manager.mode)
         assertEquals(MediaRecorder.AudioSource.VOICE_RECOGNITION, record.audioSource)
         assertTrue(ShadowAudioEffect.getAudioEffects().isEmpty())
+    }
+
+    @Test @Config(sdk = [28, 36])
+    fun speechRecognitionPrefersBuiltInMicrophoneEvenWithBluetoothMusicOutput() {
+        val mic = AudioDeviceInfoBuilder.newBuilder().setType(AudioDeviceInfo.TYPE_BUILTIN_MIC).build()
+        // The builder sets a device type but leaves its AudioPort role unset.
+        val port = ReflectionHelpers.getField<Any>(mic, "mPort")
+        ReflectionHelpers.setField(port, "mRole", 1) // AudioPort.ROLE_SOURCE
+        // Android 16 separates input/output conversion; this builder uses the output map.
+        ReflectionHelpers.setField(port, "mType", 0x80000004.toInt()) // DEVICE_IN_BUILTIN_MIC
+        val bluetooth = AudioDeviceInfoBuilder.newBuilder().setType(AudioDeviceInfo.TYPE_BLUETOOTH_SCO).build()
+        val captureManager = ReflectionHelpers.getField<AudioManager>(sink, "audioManager")
+        shadowOf(captureManager).setInputDevices(listOf(bluetooth, mic))
+        assertEquals("Built-in microphone fixture type", AudioDeviceInfo.TYPE_BUILTIN_MIC, mic.type)
+        assertEquals(2, captureManager.getDevices(AudioManager.GET_DEVICES_INPUTS).size)
+        sink.setAudioOutput(AudioOutput.BLUETOOTH)
+        sink.onMicrophoneStarted(speechRecognition, config("speechrecognition"))
+        val record = awaitCapture()
+        assertSame(microphoneLog(), mic, record.preferredDevice)
+        assertEquals(AudioManager.MODE_NORMAL, manager.mode)
+        sink.onMicrophoneStopped(speechRecognition)
+        assertEquals(AudioRecord.STATE_UNINITIALIZED, record.state)
     }
 
     @Test fun microphoneMetadataAndFinalCountersReachTheAudioDiagnosticCallback() {

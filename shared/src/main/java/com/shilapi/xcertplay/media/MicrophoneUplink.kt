@@ -2,7 +2,10 @@ package com.shilapi.xcertplay.media
 
 import android.media.AudioFormat as AndroidAudioFormat
 import android.media.AudioRecord
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.MediaRecorder
+import android.os.Build
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.NoiseSuppressor
@@ -21,12 +24,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Captures one PCM microphone stream and sends it back to the phone as sealed CarPlay RTP.
  *
- * The recorder runs only while the matching audio stream is active, so callers start this after
- * the first downlink audio packet and close it on stream teardown.
+ * The recorder runs only while the matching input stream is active. Callers start it after
+ * stream SETUP and close it on teardown, even if the phone sends no downlink audio.
  */
 internal class MicrophoneUplink(
     private val config: MicrophoneConfig,
     private val onDiagnostic: (String) -> Unit = {},
+    private val audioManager: AudioManager? = null,
 ) : Closeable {
     private val running = AtomicBoolean(false)
     private val stats = MicrophoneCaptureStats(config, report = { message ->
@@ -87,6 +91,9 @@ internal class MicrophoneUplink(
                         .build(),
                 )
                 .setBufferSizeInBytes(bufferSize)
+                .apply {
+                    if (Build.VERSION.SDK_INT >= 30) setPrivacySensitive(true)
+                }
                 .build()
         } catch (error: Exception) {
             Log.e(TAG, "microphone recorder creation failed", error)
@@ -102,6 +109,23 @@ internal class MicrophoneUplink(
             nextEncoder?.close()
             running.set(false)
             return false
+        }
+
+        // Voice search should hear the receiver's built-in mic, independently of music output.
+        // Calls retain the selected communication device (including a Bluetooth headset mic).
+        if (config.audioType != "telephony") {
+            try {
+                val mic = audioManager?.getDevices(AudioManager.GET_DEVICES_INPUTS)
+                    ?.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+                if (mic != null) {
+                    val accepted = nextRecorder.setPreferredDevice(mic)
+                    val message = "Microphone: input builtIn=true accepted=$accepted"
+                    Log.i(TAG, message)
+                    runCatching { onDiagnostic(message) }
+                }
+            } catch (error: RuntimeException) {
+                Log.w(TAG, "microphone input selection unavailable; keeping platform route", error)
+            }
         }
 
         val nextSocket = try {

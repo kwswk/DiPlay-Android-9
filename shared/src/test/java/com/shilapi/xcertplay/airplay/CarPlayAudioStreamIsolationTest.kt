@@ -2,6 +2,8 @@ package com.shilapi.xcertplay.airplay
 
 import java.io.Closeable
 import java.net.Socket
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.security.SecureRandom
 import org.junit.Assert.*
 import org.junit.Test
@@ -12,6 +14,70 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class CarPlayAudioStreamIsolationTest {
+    @Test fun speechInputStartsAfterSetupResponseWithoutAnySpeakerPacketsAndStopsOnDisconnect() {
+        val started = mutableListOf<AudioStreamId>()
+        val stopped = mutableListOf<AudioStreamId>()
+        val engine = CarPlayMediaEngine(object : MediaSink {
+            override fun onMicrophoneStarted(id: AudioStreamId, config: MicrophoneConfig) { started.add(id) }
+            override fun onMicrophoneStopped(id: AudioStreamId) { stopped.add(id) }
+        }, microphoneEnabled = true)
+        val session = session()
+        val id = AudioStreamId(100, "speechrecognition")
+        try {
+            assertNotNull(engine.onAudio(session, 100, setup("speechRecognition") +
+                mapOf("dataPort" to 9000, "audioFormat" to 0x10L)))
+            assertTrue(started.isEmpty())
+            engine.onSetupResponseSent(session)
+            assertEquals(listOf(id), started)
+            engine.onSetupResponseSent(session)
+            assertEquals("Repeated response callbacks must not restart capture", listOf(id), started)
+            engine.onSessionClosed(session)
+            assertEquals(listOf(id), stopped)
+        } finally {
+            engine.onSessionClosed(session)
+            session.close()
+        }
+    }
+
+    @Test fun tornDownInputCannotStartFromALateSetupCallback() {
+        val started = mutableListOf<AudioStreamId>()
+        val engine = CarPlayMediaEngine(object : MediaSink {
+            override fun onMicrophoneStarted(id: AudioStreamId, config: MicrophoneConfig) { started.add(id) }
+        }, microphoneEnabled = true)
+        val session = session()
+        try {
+            engine.onAudio(session, 100, setup("speechRecognition") +
+                mapOf("dataPort" to 9000, "audioFormat" to 0x10L))
+            engine.onTeardown(session, 100)
+            engine.onSetupResponseSent(session)
+            assertTrue(started.isEmpty())
+        } finally {
+            engine.onSessionClosed(session)
+            session.close()
+        }
+    }
+
+    @Test fun advertisedDefaultAndCompatibilityInputsWorkButOutputOnlyStreamsNeverCapture() {
+        val started = mutableListOf<AudioStreamId>()
+        val engine = CarPlayMediaEngine(object : MediaSink {
+            override fun onMicrophoneStarted(id: AudioStreamId, config: MicrophoneConfig) { started.add(id) }
+        }, microphoneEnabled = true)
+        val session = session()
+        try {
+            for (type in listOf("default", "compatibility", "media", "alert")) {
+                engine.onAudio(session, 100, setup(type) + mapOf("dataPort" to 9000, "audioFormat" to 0x10L))
+                engine.onSetupResponseSent(session)
+            }
+            assertEquals(listOf(AudioStreamId(100, "default"), AudioStreamId(100, "compatibility")), started)
+            engine.onAudio(session, 100, setup("speechRecognition") + mapOf("dataPort" to 0))
+            engine.onSetupResponseSent(session)
+            assertEquals(2, started.size)
+        } finally {
+            engine.onSessionClosed(session)
+            session.close()
+        }
+    }
+
     @Test fun guidanceSetupAndMediaReplacementKeepTheOtherAudioStreamAlive() {
         val session = session()
         val engine = CarPlayMediaEngine(object : MediaSink {})
@@ -68,7 +134,9 @@ class CarPlayAudioStreamIsolationTest {
 
     private fun session(): AirPlaySession {
         val session = AirPlaySession(
-            socket = Socket(),
+            socket = object : Socket() {
+                override fun getRemoteSocketAddress() = InetSocketAddress(InetAddress.getLoopbackAddress(), 9000)
+            },
             config = AirPlayConfig(
                 deviceName = "test", deviceId = "02:00:00:00:00:02", btMac = "02:00:00:00:00:01",
                 sourceVersion = "1.0", main = AirPlayDisplayConfig(widthPixels = 800, heightPixels = 480),
