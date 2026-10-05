@@ -79,3 +79,9 @@ claim that those issues were resolved in 0.2.12.
   A separate temporary signal-only probe also reproduced weak capture outside
   CarPlay. Further device-route diagnosis is required; this is not a verified
   A5360 microphone fix. Google Maps voice search and calls still need live checks.
+- Rebooting the A5360 did not restore capture. The user also reported that a normal
+  Samsung Camera recording did not capture voice properly. Both bottom/default
+  and explicitly preferred rear-microphone probe routes remained weak, including
+  unprocessed capture. Global microphone access is enabled and Android's mute
+  flags are false. Samsung microphone diagnostics are needed to distinguish a
+  device hardware/firmware fault from other device-wide interference.
