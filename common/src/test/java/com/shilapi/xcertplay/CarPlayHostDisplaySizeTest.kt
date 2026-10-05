@@ -214,9 +214,11 @@ class CarPlayHostDisplaySizeTest {
         assertEquals(0, keepLogs())
     }
 
-    @Test fun resizeWithoutASessionKeepsTheExistingRestartPath() {
+    @Test fun resizeWithoutASessionRecordsTheSizeWithoutAnotherTeardown() {
         applySize(700, 990)
-        assertEquals(1, getField("restartGeneration"))
+        assertEquals(size(700, 990), getField("activeDisplaySize"))
+        assertEquals(0, getField("restartGeneration"))
+        assertFalse(getField("handshakeResetInProgress") as Boolean)
     }
 
     @Test fun textureTransformFitsTheNegotiatedCanvas() {

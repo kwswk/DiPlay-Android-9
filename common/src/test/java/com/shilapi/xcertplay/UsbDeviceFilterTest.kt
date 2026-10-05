@@ -9,7 +9,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
+import org.robolectric.shadow.api.Shadow
+import org.robolectric.util.ReflectionHelpers
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
@@ -46,9 +47,9 @@ class UsbDeviceFilterTest {
             ComponentName(context, CarPlayHostActivity::class.java),
             PackageManager.GET_META_DATA,
         )
-        val device = Mockito.mock(UsbDevice::class.java)
-        Mockito.`when`(device.vendorId).thenReturn(vendorId)
-        Mockito.`when`(device.productId).thenReturn(productId)
+        val device = Shadow.newInstanceOf(UsbDevice::class.java)
+        ReflectionHelpers.setField(device, "mVendorId", vendorId)
+        ReflectionHelpers.setField(device, "mProductId", productId)
         val filterClass = Class.forName("android.hardware.usb.DeviceFilter")
         val read = filterClass.getMethod("read", XmlPullParser::class.java)
         val matches = filterClass.getMethod("matches", UsbDevice::class.java)

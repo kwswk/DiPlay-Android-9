@@ -507,20 +507,30 @@ class CarPlayHostActivity : ComponentActivity() {
         hideTopBar = AirPlayPersistence.loadHideTopBar(this)
         hideBottomBar = AirPlayPersistence.loadHideBottomBar(this)
         safeAreaDrawOutside = AirPlayPersistence.loadSafeAreaDrawOutside(this)
-        locationReportingEnabled = AirPlayPersistence.loadLocationReportingEnabled(this)
         locationPermissionAvailable = hasFineLocationPermission()
+        loadConnectionSettings()
+        wirelessPermissionsReady = !wirelessEnabled || hasRequiredWirelessPermissions()
+    }
+
+    /**
+     * Connection settings owned by the settings screen ([DiPlayActivity]). It saves them in this
+     * process while this screen keeps running, so they are re-read on every resume instead of
+     * relying on the snapshot [onCreate] took: otherwise the next handshake would keep using the
+     * mode, hotspot and MFI settings that were current when this screen was first opened.
+     */
+    private fun loadConnectionSettings() {
         wirelessEnabled = AirPlayPersistence.loadWirelessEnabled(this)
         mfiTarget = AirPlayPersistence.loadMfiTarget(this)
         mfiI2cPath = AirPlayPersistence.loadMfiI2cPath(this)
         remoteMfiServer = AirPlayPersistence.loadRemoteMfiServer(this)
         remoteMfiToken = AirPlayPersistence.loadRemoteMfiToken(this)
+        locationReportingEnabled = AirPlayPersistence.loadLocationReportingEnabled(this)
         wirelessHotspotMode = AirPlayPersistence.loadWirelessHotspotMode(this)
         manualHotspotSsid = AirPlayPersistence.loadManualHotspotSsid(this)
         manualHotspotPassphrase = AirPlayPersistence.loadManualHotspotPassphrase(this)
         manualHotspotBand = AirPlayPersistence.loadManualHotspotBand(this)
         manualHotspotChannel = AirPlayPersistence.loadManualHotspotChannel(this)
         manualHotspotSecurity = AirPlayPersistence.loadManualHotspotSecurity(this)
-        wirelessPermissionsReady = !wirelessEnabled || hasRequiredWirelessPermissions()
     }
 
     private fun requestStartupPrerequisites() {
@@ -630,6 +640,9 @@ class CarPlayHostActivity : ComponentActivity() {
             recreate()
             return
         }
+        // The settings screen returns here with FLAG_ACTIVITY_REORDER_TO_FRONT, so this screen is
+        // resumed, not recreated: refresh what that screen can change before it is used again.
+        if (!menuOpen) loadConnectionSettings()
         locationPermissionAvailable = hasFineLocationPermission()
         if (locationReportingEnabled && !locationPermissionAvailable && !menuOpen) {
             requestLocationPermission()
@@ -3455,6 +3468,8 @@ class CarPlayHostActivity : ComponentActivity() {
         mainHandler.removeCallbacks(applyDisplaySize)
         if (size == activeDisplaySize && !displayLayoutChanged()) {
             pendingDisplaySize = null
+            // A rotation back can cancel the last pending resize after teardown has finished.
+            maybeStartCarPlay()
             return
         }
         pendingDisplaySize = size
@@ -3464,7 +3479,12 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun applyDisplaySize(size: DisplaySize) {
         val display = sessionDisplay
         val layoutChanged = displayLayoutChanged()
-        if (shuttingDown.get() || (size == activeDisplaySize && !layoutChanged)) return
+        if (shuttingDown.get()) return
+        if (size == activeDisplaySize && !layoutChanged) {
+            // Teardown may have removed the session that made this same-size rotation pending.
+            maybeStartCarPlay()
+            return
+        }
         val previous = activeDisplaySize
         activeDisplaySize = size
         recordDetectedMaximum(size)
@@ -3477,6 +3497,12 @@ class CarPlayHostActivity : ComponentActivity() {
                 "Display updated while handshake is reset: " +
                     "${previous.width}x${previous.height} -> ${size.width}x${size.height}",
             )
+        } else if (controller == null && display == null) {
+            appendLog(
+                "Display updated before CarPlay startup: " +
+                    "${previous.width}x${previous.height} -> ${size.width}x${size.height}",
+            )
+            maybeStartCarPlay()
         } else if (display != null && !layoutChanged &&
             size.width <= display.windowWidth && size.height <= display.windowHeight) {
             // Keep camera shrink/restore cycles within the original window connected. If the
@@ -3545,6 +3571,7 @@ class CarPlayHostActivity : ComponentActivity() {
             shuttingDown.get() ||
             menuOpen ||
             handshakeResetInProgress ||
+            pendingDisplaySize != null ||
             controller != null
         ) {
             return
@@ -3624,7 +3651,9 @@ class CarPlayHostActivity : ComponentActivity() {
             runOnUiThread {
                 if (!shuttingDown.get() && generation == restartGeneration) {
                     handshakeResetInProgress = false
-                    startCarPlay(size)
+                    // The display can rotate again while the old stack is closing. Use the
+                    // latest accepted size, and wait for any pending resize to settle first.
+                    maybeStartCarPlay()
                 }
             }
         }
