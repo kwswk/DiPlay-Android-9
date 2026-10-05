@@ -10,6 +10,18 @@ class MicrophoneCaptureStatsTest {
     private val config = MicrophoneConfig("telephony", 48_000, 1, 100, 20,
         InetAddress.getByName("198.51.100.20"), 54321, ByteArray(32) { 0x7f }, AudioCodecKind.OPUS)
 
+    @Test fun signalCountersDistinguishSilentPcmWithoutRetainingOrLoggingSamples() {
+        val reports = mutableListOf<String>()
+        val stats = MicrophoneCaptureStats(config, reports::add) { 0 }
+        stats.read(6, byteArrayOf(0, 0, 1, 0, 0, 0x80.toByte(), 0x7f, 0x7f))
+        stats.flush(ended = true)
+        assertTrue(reports.last().contains("signalPeak=32768 nonZeroSamples=2"))
+        stats.read(4, ByteArray(4))
+        stats.flush(ended = true)
+        assertTrue(reports.last().contains("signalPeak=0 nonZeroSamples=0"))
+        assertFalse(reports.joinToString().contains("pcm="))
+    }
+
     @Test fun aggregatesFiveSecondWindowsAndKeepsFinalPartialWindow() {
         var now = 0L
         val reports = mutableListOf<String>()

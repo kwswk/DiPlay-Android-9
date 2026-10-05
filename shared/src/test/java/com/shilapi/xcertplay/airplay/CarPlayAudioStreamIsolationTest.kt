@@ -14,6 +14,38 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class CarPlayAudioStreamIsolationTest {
+    @Test fun opusMicrophoneUsesNegotiatedInputRateAndClockWhileSpeakerDecodeRemains48k() {
+        val configs = mutableListOf<MicrophoneConfig>()
+        val engine = CarPlayMediaEngine(object : MediaSink {
+            override fun onMicrophoneStarted(id: AudioStreamId, config: MicrophoneConfig) { configs.add(config) }
+        }, microphoneEnabled = true)
+        val session = session()
+        try {
+            for ((bits, rate) in listOf(0x10000000L to 16_000, 0x20000000L to 24_000, 0x40000000L to 48_000)) {
+                engine.onAudio(session, 100, setup("speechRecognition") +
+                    mapOf("dataPort" to 9000, "audioFormat" to bits, "framesPerPacket" to rate / 50))
+                engine.onSetupResponseSent(session)
+                val input = configs.last()
+                assertEquals(rate, input.sampleRate)
+                assertEquals(20, input.frameMillis)
+                assertEquals(rate / 50, input.samplesPerPacket)
+                assertEquals(rate / 50 * 2, input.frameBytes)
+                assertEquals(48_000, AudioStreamCodec.fromFormatBits(bits, 100).sampleRate)
+                val counters = MicrophoneCounters()
+                MicrophonePacketizer.sealPacket(input.key, 100, counters, byteArrayOf(1), input.samplesPerPacket)
+                assertEquals(rate / 50, counters.timestamp)
+            }
+            engine.onAudio(session, 100, setup("speechRecognition") +
+                mapOf("dataPort" to 9000, "audioFormat" to 0x20000000L, "framesPerPacket" to 960))
+            engine.onSetupResponseSent(session)
+            assertEquals(40, configs.last().frameMillis)
+            assertEquals(960, configs.last().samplesPerPacket)
+        } finally {
+            engine.onSessionClosed(session)
+            session.close()
+        }
+    }
+
     @Test fun speechInputStartsAfterSetupResponseWithoutAnySpeakerPacketsAndStopsOnDisconnect() {
         val started = mutableListOf<AudioStreamId>()
         val stopped = mutableListOf<AudioStreamId>()

@@ -392,22 +392,26 @@ class CarPlayMediaEngine(
         val host = session.remoteAddress ?: return null
         val key = dataStreamKey(session, stream, DATASTREAM_INPUT_KEY) ?: return null
         val formatBits = (stream["audioFormat"] as? Number)?.toLong() ?: 0L
+        // Opus speaker decoding uses 48 kHz; input has its own negotiated rate and RTP clock.
+        val inputRate = if (format.codec == AudioCodecKind.OPUS) {
+            when {
+                formatBits and OPUS_48K != 0L -> 48_000
+                formatBits and OPUS_24K != 0L -> 24_000
+                else -> 16_000
+            }
+        } else format.sampleRate
         val framesPerPacket = (stream["framesPerPacket"] as? Number)?.toInt() ?: 0
-        val frameMillis = if (format.codec == AudioCodecKind.OPUS) {
-            20
-        } else if (framesPerPacket > 0) {
-            Math.round(framesPerPacket * 1000.0 / format.sampleRate).toInt().coerceIn(5, 60)
+        val requestedFrameMillis = if (framesPerPacket > 0) {
+            Math.round(framesPerPacket * 1000.0 / inputRate).toInt().coerceIn(5, 60)
         } else {
             20
         }
-        val opusBitrate = when {
-            formatBits and OPUS_48K != 0L -> 96_000
-            formatBits and OPUS_24K != 0L -> 64_000
-            else -> 48_000
-        }
+        val frameMillis = if (format.codec == AudioCodecKind.OPUS && requestedFrameMillis !in listOf(5, 10, 20, 40, 60))
+            20 else requestedFrameMillis
+        val opusBitrate = if (inputRate == 48_000) 96_000 else 48_000
         return MicrophoneConfig(
             audioType = format.audioType,
-            sampleRate = format.sampleRate,
+            sampleRate = inputRate,
             channels = format.channels,
             payloadType = type,
             frameMillis = frameMillis,

@@ -36,6 +36,12 @@ codec fix.
 - Release microphone capture and audio mode on disconnect, not only TEARDOWN.
 - Calls retain the configured communication route, including headset microphones.
 - Never log microphone packet payload bytes.
+- Honor the independent 16/24/48 kHz Opus microphone rate and frame duration;
+  speaker decoding remains 48 kHz. Use the bundled libopus for rates/frame sizes
+  the Android encoder cannot accept, with matching RTP sample increments.
+- Read packet-sized PCM buffers to avoid batching several voice packets together.
+- Use the standard MIC source for non-call input. Diagnostics retain only aggregate
+  signal peaks and sample counts; no microphone recordings or payloads are saved.
 
 Android may reject a preferred device or override it through firmware policy.
 The existing microphone diagnostics report the actual routed device type and
@@ -57,15 +63,19 @@ claim that those issues were resolved in 0.2.12.
 
 ## Validation
 
-- Shared suite: 418 cases, 417 passed and one existing skipped case; no failures.
+- Shared suite: 420 cases, 419 passed and one existing skipped case; no failures.
   Includes microphone routing on API 28 and API 36.
+- Native Opus encode/decode check passed at 16/24/48 kHz with 20/40 ms frames.
 - Affected host, controls, media metadata, lyrics, USB-filter and settings-resume
   suite: 55 passed, including host settings tests on API 28 and API 36.
 - Debug APK assembly and Android lint passed; lint reports 18 warnings and no errors.
 - Public-tree credential check and whitespace/conflict checks passed.
-- APK version code 35. No claim of a complete upstream 0.2.12 upgrade.
-- Installed version code 35 successfully on the A5360 and verified that microphone
-  permission is granted. Restored the temporary system rotation overrides used
-  during landscape testing. The device then disconnected from ADB before live
-  diagnostics could be collected. Siri and Google Maps recognition remains to be
-  verified on the final build.
+- APK version code 38 installed on both receivers. No claim of a complete upstream
+  0.2.12 upgrade. Temporary system rotation overrides have been restored.
+- On 2026-10-06 the user confirmed Siri recognition works on the Android 9 tablet
+  (R52N81SZNRF); capture peaks and UDP counters also showed usable input.
+- A5360 recognition remains unresolved: recording permission is granted, Android
+  reports the built-in route and no silencing, but capture is mostly near zero.
+  A separate temporary signal-only probe also reproduced weak capture outside
+  CarPlay. Further device-route diagnosis is required; this is not a verified
+  A5360 microphone fix. Google Maps voice search and calls still need live checks.

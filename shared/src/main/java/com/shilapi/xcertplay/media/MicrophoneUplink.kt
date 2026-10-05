@@ -65,11 +65,10 @@ internal class MicrophoneUplink(
 
         val source = when (config.audioType) {
             "telephony" -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
-            "speechrecognition" -> MediaRecorder.AudioSource.VOICE_RECOGNITION
             else -> MediaRecorder.AudioSource.MIC
         }
         val nextEncoder = if (config.codec == AudioCodecKind.OPUS) {
-            OpusEncoder(config.bitrate ?: 48_000).takeIf { it.available }
+            OpusEncoder(config.bitrate ?: 48_000, config.sampleRate, config.frameMillis).takeIf { it.available }
         } else {
             null
         }
@@ -203,7 +202,7 @@ internal class MicrophoneUplink(
 
     private fun capture(recorder: AudioRecord, socket: DatagramSocket) {
         val frame = ByteArray(config.frameBytes)
-        val readBuffer = ByteArray(maxOf(frame.size, MIN_READ_BYTES))
+        val readBuffer = ByteArray(frame.size)
         val counters = MicrophoneCounters()
         val routeInfo = { routeType(recorder) }
         var filled = 0
@@ -211,7 +210,7 @@ internal class MicrophoneUplink(
             while (running.get()) {
                 stats.reading()
                 val count = recorder.read(readBuffer, 0, readBuffer.size, AudioRecord.READ_BLOCKING)
-                stats.read(count)
+                stats.read(count, readBuffer)
                 if (count < 0) {
                     if (running.get()) {
                         Log.e(TAG, "microphone read failed code=$count")
@@ -342,7 +341,6 @@ internal class MicrophoneUplink(
 
     private companion object {
         const val TAG = "xcertplay-usb"
-        const val MIN_READ_BYTES = 2_048
         const val CLOSE_JOIN_MILLIS = 500L
     }
 }

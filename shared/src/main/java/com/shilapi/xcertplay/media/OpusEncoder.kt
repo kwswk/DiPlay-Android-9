@@ -6,11 +6,14 @@ import android.util.Log
 import java.io.Closeable
 
 /**
- * Encodes 20 ms chunks of 48 kHz mono PCM into raw Opus access units for the CarPlay
+ * Encodes negotiated mono PCM frames into raw Opus access units for the CarPlay
  * microphone uplink.
  */
-internal class OpusEncoder(bitrate: Int) : Closeable {
-    private val codec: MediaCodec? = try {
+internal class OpusEncoder(bitrate: Int, sampleRate: Int = 48_000, private val frameMillis: Int = 20) : Closeable {
+    private val samplesPerFrame = sampleRate * frameMillis / 1000
+    // Android's Opus encoder takes 48 kHz/20 ms input. libopus supports the phone's
+    // 16/24 kHz input formats directly, without changing the negotiated RTP clock.
+    private val codec: MediaCodec? = if (sampleRate != SAMPLE_RATE || frameMillis != 20) null else try {
         val format = MediaFormat.createAudioFormat(
             MediaFormat.MIMETYPE_AUDIO_OPUS,
             SAMPLE_RATE,
@@ -31,9 +34,9 @@ internal class OpusEncoder(bitrate: Int) : Closeable {
         Log.w(TAG, "Opus microphone encoder unavailable", error)
         null
     }
-    private var softwareHandle = if (codec == null) SoftwareOpusEncoder.create(bitrate) else 0L
+    private var softwareHandle = if (codec == null) SoftwareOpusEncoder.create(sampleRate, bitrate) else 0L
     init {
-        if (softwareHandle != 0L) Log.i(TAG, "Software Opus microphone encoder started bitrate=$bitrate")
+        if (softwareHandle != 0L) Log.i(TAG, "Software Opus microphone encoder started rate=$sampleRate frameMs=$frameMillis bitrate=$bitrate")
     }
     private val bufferInfo = MediaCodec.BufferInfo()
     private var presentationTimeUs = 0L
@@ -43,11 +46,11 @@ internal class OpusEncoder(bitrate: Int) : Closeable {
     val available: Boolean get() = (codec != null || softwareHandle != 0L) && !closed
 
     /**
-     * Queues one 20 ms PCM frame and returns all Opus access units made available by the codec.
+     * Queues one negotiated PCM frame and returns all available Opus access units.
      */
     fun encode(pcm: ByteArray): List<ByteArray> {
         if (closed) return emptyList()
-        if (softwareHandle != 0L) return listOfNotNull(SoftwareOpusEncoder.encode(softwareHandle, pcm))
+        if (softwareHandle != 0L) return listOfNotNull(SoftwareOpusEncoder.encode(softwareHandle, pcm, samplesPerFrame))
         val codec = codec ?: return emptyList()
         val inputIndex = try {
             codec.dequeueInputBuffer(INPUT_TIMEOUT_US)
@@ -69,7 +72,7 @@ internal class OpusEncoder(bitrate: Int) : Closeable {
                     presentationTimeUs,
                     0,
                 )
-                presentationTimeUs += INPUT_DURATION_US
+                presentationTimeUs += frameMillis * 1000L
             }
         }
         return drain()
@@ -140,7 +143,6 @@ internal class OpusEncoder(bitrate: Int) : Closeable {
         const val SAMPLE_RATE = 48_000
         const val CHANNELS = 1
         const val INPUT_TIMEOUT_US = 10_000L
-        const val INPUT_DURATION_US = 20_000L
         const val MAX_INPUT_BYTES = 4_096
         const val FIRST_PACKET_LOG_COUNT = 3
     }

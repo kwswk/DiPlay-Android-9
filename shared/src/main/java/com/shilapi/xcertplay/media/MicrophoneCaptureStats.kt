@@ -17,6 +17,8 @@ internal class MicrophoneCaptureStats(
     private var windowStart = nowNs()
     private var readStart = windowStart
     private var capturedBytes = 0L
+    private var signalPeak = 0
+    private var nonZeroSamples = 0L
     private var reads = 0L
     private var zeroReads = 0L
     private var readErrors = 0L
@@ -36,13 +38,23 @@ internal class MicrophoneCaptureStats(
 
     fun reading() { readStart = nowNs() }
 
-    fun read(count: Int) {
+    fun read(count: Int, pcm: ByteArray? = null) {
         reads++
         readMaxNs = maxOf(readMaxNs, (nowNs() - readStart).coerceAtLeast(0))
         when {
             count > 0 -> capturedBytes += count
             count == 0 -> zeroReads++
             else -> readErrors++
+        }
+        if (pcm != null && count > 0) {
+            val limit = minOf(count, pcm.size) and -2
+            var offset = 0
+            while (offset < limit) {
+                val sample = (pcm[offset].toInt() and 0xff) or (pcm[offset + 1].toInt() shl 8)
+                signalPeak = maxOf(signalPeak, kotlin.math.abs(sample))
+                if (sample != 0) nonZeroSamples++
+                offset += 2
+            }
         }
     }
 
@@ -72,9 +84,11 @@ internal class MicrophoneCaptureStats(
             "captureBytes=$capturedBytes reads=$reads zeroReads=$zeroReads readErrors=$readErrors " +
             "readMaxMs=${readMaxNs / 1_000_000} encodedFrames=$encodedFrames " +
             "emptyEncodedFrames=$emptyEncodedFrames udpSent=$udpSent sendErrors=$sendErrors " +
-            "sendGapMaxMs=${sendGapMaxNs / 1_000_000} ended=$ended")
+            "sendGapMaxMs=${sendGapMaxNs / 1_000_000} signalPeak=$signalPeak nonZeroSamples=$nonZeroSamples ended=$ended")
         windowStart = now
         capturedBytes = 0
+        signalPeak = 0
+        nonZeroSamples = 0
         reads = 0
         zeroReads = 0
         readErrors = 0
@@ -94,7 +108,7 @@ internal class MicrophoneCaptureStats(
         private fun metadata(config: MicrophoneConfig): String {
             val (type, source) = when (config.audioType) {
                 "telephony" -> "telephony" to "VOICE_COMMUNICATION"
-                "speechrecognition" -> "speechrecognition" to "VOICE_RECOGNITION"
+                "speechrecognition" -> "speechrecognition" to "MIC"
                 else -> "other" to "MIC"
             }
             return "type=$type source=$source codec=${config.codec.name} " +
