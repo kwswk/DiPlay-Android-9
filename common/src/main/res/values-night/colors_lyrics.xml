@@ -1,0 +1,8 @@
+<resources>
+    <color name="lyrics_background">#101114</color>
+    <color name="lyrics_surface">#232428</color>
+    <color name="lyrics_text">#F5F5F7</color>
+    <color name="lyrics_secondary">#B7BBC3</color>
+    <color name="lyrics_control">#35363C</color>
+    <color name="lyrics_ripple">#626872</color>
+</resources>

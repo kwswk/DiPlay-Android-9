@@ -6,7 +6,12 @@ Branch: `feature/android-lyrics-panel`, based on committed `main` at `10456ed`.
 
 Enable **Show lyrics panel** in Settings → Display, or in the CarPlay **F10 Play
 setting** controls (also reachable with the three-finger downward swipe or Menu
-key). The preference is per Android device and defaults to off.
+key). The preference is per Android device and defaults to off. When Spotify is
+playing and the panel is hidden, a floating **Lyrics** button appears on the
+passenger side. It requires Spotify to be identified in the iPhone's retained
+source-app metadata, and a song title plus active playback. It hides for other
+apps, paused playback, disconnected sessions, and narrow/portrait windows. Opening
+it uses the same saved setting and resize reconnect as the existing controls.
 
 On a wide landscape display, CarPlay stays on the driver's side:
 
@@ -63,14 +68,20 @@ accepted. The documented newer API endpoints returned 404 during investigation.
 
 ## Design and validation
 
-Native views reuse F10 Play's Material-style semantic colors. Current timed
+Native views use neutral, appearance-aware CarPlay-style surfaces, grouped into
+three rounded cards: song title/artist, scrollable lyrics, and Find/Choose, Retry,
+and Hide controls. Current timed
 lyrics are 24 sp, bold, with a mint accent; surrounding lines and untimed lyrics are
 18 sp. Provider names appear only in the recording chooser, not the main panel.
 Actions have at least 48 dp hit targets. Text wraps and the lyrics area
-scrolls independently. No animations or floating button over CarPlay.
+scrolls independently. The optional Spotify shortcut sits opposite the CarPlay
+dock and respects system bars and display cutouts. It uses the host's existing
+two-second foreground configuration tick; it performs no lyrics requests while
+the panel is hidden.
 
-Measured contrast against the panel surface: dark secondary text 8.57:1, dark
-active lyrics 10.90:1; light secondary text 6.20:1, light active lyrics 6.64:1.
+Measured contrast against the card surface: dark primary text 14.2:1, secondary
+text 8.1:1, active lyrics 10.6:1; light primary text 17.6:1, secondary text 5.6:1,
+active lyrics 6.6:1. The active line also uses bold weight.
 
 Automated checks cover LRC parsing, seeking, provider response formats and
 failures, duration matching, instrumental/untimed results, on-demand recording
@@ -87,11 +98,35 @@ recording chooser, showed bold mint lyrics without a provider label, and placed
 the lyrics on the left in right-hand-drive mode. Session logs confirmed canvas
 renegotiation between 1560×1080 (lyrics shown) and 2400×1080 (lyrics hidden), with
 the corresponding four-/five-column CarPlay app layouts filling their panes.
-The final targeted regression suite passed 49 checks; lint and the APK build
+The earlier targeted regression suite passed 49 checks; lint and the APK build
 passed. Manual recording choices are checked for persistence across playback
 updates on API 28 and 36.
 
 Limits: provider coverage/availability and first-result accuracy are variable.
 There is no disk cache, bundled lyrics database, local-LRC import, or new iOS
-app in this experiment. The P205 was not connected for a physical test; Android
-9 remains covered by the API 28 automated checks.
+app in this experiment. The P205's lyrics playback remains covered by the API 28
+automated checks rather than a physical Spotify lyrics test.
+
+## Build 39 update (2026-10-06)
+
+- The 55 affected checks passed, covering API 28/36, 1.5× text scaling, phone
+  removal/restoration, Spotify eligibility, both passenger-side positions,
+  projection resizing, and connection-settings refresh. APK assembly and lint
+  passed; lint has 18 existing warnings and no errors.
+- On the physical A5360 in landscape/right-hand-drive mode, the new cards displayed
+  timed Spotify lyrics with bold mint active lines. Hiding the panel restored the
+  full-width CarPlay canvas and revealed the floating Lyrics action on the left,
+  clear of the right-side dock.
+- Build 39 was installed and its package version verified on both Samsung
+  receivers. The A5360's temporary landscape rotation override was restored to
+  its original free-rotation setting. Left-hand-drive shortcut/panel placement
+  and phone removal/restoration were checked through the API 28/36 automated
+  tests; real Bluetooth pairings were not removed during validation.
+
+## Removing phones
+
+**Your phones → Remove** removes a receiver's saved selection/list entry from
+F10 Play and prevents it being selected automatically. Removing the selected
+phone stops its current CarPlay session. Android Bluetooth pairing is kept.
+**Add phone** lists paired phones, including removed entries; selecting one
+restores it. Removal and restoration persist across app restarts.

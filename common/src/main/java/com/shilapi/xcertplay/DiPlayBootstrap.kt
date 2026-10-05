@@ -53,7 +53,18 @@ internal object DiPlayPreferences {
     fun phoneAddress(context: Context): String? = prefs(context).getString("phone_address", null)
     fun phoneName(context: Context): String = prefs(context).getString("phone_name", null) ?: "Your iPhone"
     fun savePhone(context: Context, address: String, name: String) {
-        prefs(context).edit().putString("phone_address", address).putString("phone_name", name).apply()
+        val saved = prefs(context)
+        saved.edit().putString("phone_address", address).putString("phone_name", name)
+            .putStringSet("removed_phones", saved.getStringSet("removed_phones", emptySet()).orEmpty() - address.uppercase(java.util.Locale.ROOT)).apply()
+    }
+    fun isPhoneRemoved(context: Context, address: String) =
+        address.uppercase(java.util.Locale.ROOT) in prefs(context).getStringSet("removed_phones", emptySet()).orEmpty()
+    fun removePhone(context: Context, address: String) {
+        val saved = prefs(context)
+        val edit = saved.edit().putStringSet("removed_phones",
+            saved.getStringSet("removed_phones", emptySet()).orEmpty() + address.uppercase(java.util.Locale.ROOT))
+        if (address.equals(phoneAddress(context), true)) edit.remove("phone_address").remove("phone_name")
+        edit.apply()
     }
     fun autoConnect(context: Context) = prefs(context).getBoolean("auto_connect", true)
     fun saveAutoConnect(context: Context, value: Boolean) {

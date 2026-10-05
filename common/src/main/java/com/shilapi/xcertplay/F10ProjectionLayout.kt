@@ -9,6 +9,7 @@ internal class F10ProjectionLayout(context: Context, private val projection: Vie
     var lyricsEnabled = false
         set(value) { field = value; requestLayout() }
     val lyricsVisible: Boolean get() = lyrics.visibility == View.VISIBLE
+    val lyricsAvailable: Boolean get() = supportsLyrics(width, height)
     var lyricsOnLeft = false
         set(value) {
             field = value
@@ -29,9 +30,14 @@ internal class F10ProjectionLayout(context: Context, private val projection: Vie
         val width = View.MeasureSpec.getSize(widthMeasureSpec)
         val height = View.MeasureSpec.getSize(heightMeasureSpec)
         val density = resources.displayMetrics.density
-        val show = lyricsEnabled && width >= 700 * density && height >= 260 * density && width > height
+        val show = lyricsEnabled && supportsLyrics(width, height)
         lyrics.visibility = if (show) View.VISIBLE else View.GONE
         lyrics.layoutParams.width = if (show) (width * .35f).toInt().coerceIn((260 * density).toInt(), (340 * density).toInt()) else 0
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    private fun supportsLyrics(width: Int, height: Int): Boolean {
+        val density = resources.displayMetrics.density
+        return width >= 700 * density && height >= 260 * density && width > height
     }
 }

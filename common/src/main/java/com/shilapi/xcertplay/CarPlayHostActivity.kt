@@ -245,6 +245,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var videoView: TextureView? = null
     private var projectionLayout: F10ProjectionLayout? = null
     private var lyricsPanel: F10LyricsPanel? = null
+    private var lyricsShortcut: F10LyricsShortcut? = null
     private var gestureOverlay: View? = null
     private var settingsMenu: View? = null
     private var mfiTargetGroup: RadioGroup? = null
@@ -372,6 +373,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private val pollConfiguration = object : Runnable {
         override fun run() {
             refreshConfiguration()
+            refreshLyricsShortcut()
             mainHandler.postDelayed(this, CONFIGURATION_POLL_INTERVAL_MILLIS)
         }
     }
@@ -633,6 +635,7 @@ class CarPlayHostActivity : ComponentActivity() {
         projectionLayout?.lyricsOnLeft = AirPlayPersistence.loadRightHandDrive(this)
         lyricsPanel?.outerEdgeOnLeft = AirPlayPersistence.loadRightHandDrive(this)
         lyricsPanel?.setForeground(true)
+        refreshLyricsShortcut()
         navigatingWithinApp = false
         val languagePreference = AppLocale.preference(this)
         if (Build.VERSION.SDK_INT < 33 && languagePreference != languagePreferenceAtCreate) {
@@ -945,6 +948,7 @@ class CarPlayHostActivity : ComponentActivity() {
             addView(video, FrameLayout.LayoutParams(-1, -1))
             addView(gestureLayer, FrameLayout.LayoutParams(-1, -1))
         }
+        lyricsShortcut = F10LyricsShortcut(this) { setLyricsEnabled(true) }.also { projection.addView(it) }
         val lyrics = F10LyricsPanel(this) { setLyricsEnabled(false) }.apply { outerEdgeOnLeft = rightHandDrive }
         lyricsPanel = lyrics
         val layout = F10ProjectionLayout(this, projection, lyrics).apply {
@@ -1049,6 +1053,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun setLyricsEnabled(enabled: Boolean) {
         DiPlayPreferences.saveLyricsEnabled(this, enabled)
         projectionLayout?.lyricsEnabled = enabled
+        refreshLyricsShortcut()
         if (enabled && resources.configuration.screenWidthDp < 700) {
             android.widget.Toast.makeText(this, R.string.f10_lyrics_rotate, android.widget.Toast.LENGTH_LONG).show()
         }
@@ -3886,6 +3891,14 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun updateDebugOverlays() {
         statusScrollView?.visibility = View.GONE
         connectionPanel?.visibility = if (activeScreenStreamTypes.isEmpty()) View.VISIBLE else View.GONE
+        refreshLyricsShortcut()
+    }
+
+    private fun refreshLyricsShortcut() {
+        val layout = projectionLayout ?: return
+        lyricsShortcut?.update(CarPlayMediaKeys.snapshot(),
+            available = SCREEN_TYPE_MAIN in activeScreenStreamTypes && layout.lyricsAvailable && !layout.lyricsEnabled && !menuOpen,
+            passengerOnLeft = layout.lyricsOnLeft)
     }
 
     private fun friendlyStage(message: String): String = when {

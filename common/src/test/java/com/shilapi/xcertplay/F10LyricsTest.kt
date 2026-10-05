@@ -17,6 +17,28 @@ import java.io.IOException
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28, 36])
 class F10LyricsTest {
+    @Test fun spotifyShortcutRespectsPlaybackSpaceVisibilityAndPassengerSide() {
+        val context = RuntimeEnvironment.getApplication()
+        var opened = false
+        val shortcut = F10LyricsShortcut(context) { opened = true }
+        val info = CarPlayNowPlaying(title = "Song", sourceApp = "Spotify", playing = true)
+        shortcut.update(info, available = true, passengerOnLeft = false)
+        assertEquals(View.VISIBLE, shortcut.visibility)
+        assertEquals(android.view.Gravity.BOTTOM or android.view.Gravity.RIGHT,
+            (shortcut.layoutParams as FrameLayout.LayoutParams).gravity)
+        shortcut.performClick()
+        assertTrue(opened)
+        shortcut.update(info, available = true, passengerOnLeft = true)
+        assertEquals(android.view.Gravity.BOTTOM or android.view.Gravity.LEFT,
+            (shortcut.layoutParams as FrameLayout.LayoutParams).gravity)
+        for (hidden in listOf(info.copy(playing = false), info.copy(sourceApp = "Music"),
+            info.copy(sourceApp = null), info.copy(title = ""))) {
+            shortcut.update(hidden, available = true, passengerOnLeft = false)
+            assertEquals(View.GONE, shortcut.visibility)
+        }
+        shortcut.update(info, available = false, passengerOnLeft = true)
+        assertEquals(View.GONE, shortcut.visibility)
+    }
     @Test fun lrcHandlesFractionsOffsetsRepeatedTimestampsAndSeek() {
         val lines = LrcParser.parse("\uFEFF[ar:Example]\n[offset:500]\n[00:12.5][00:20.50]Again\n[00:00.100]Start\n[00:10]First\n[00:72.00]Invalid\n[00:12.500]Again")
         assertEquals(listOf(0L, 9_500L, 12_000L, 20_000L), lines.map { it.millis })

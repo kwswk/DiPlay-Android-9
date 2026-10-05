@@ -232,21 +232,35 @@ class DiPlayActivity : ComponentActivity() {
                 openSystem(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE))
             }, matchButton())
         } else if (paired.isEmpty()) {
-            list.addView(label(getString(R.string.f10_no_paired_iphone), 16, MUTED), matchButton(0))
+            list.addView(label(getString(R.string.f10_no_visible_phone), 16, MUTED), matchButton(0))
         } else paired.forEach { device ->
             val selected = device.address.equals(DiPlayPreferences.phoneAddress(this), true)
             val name = device.name ?: getString(R.string.paired_device)
             val display = if (paired.count { it.name == device.name } > 1) "$name · ${device.address.takeLast(5)}" else name
-            list.addView(button(display, false) { selectPhone(device, true) }.apply {
+            val phone = row().apply { gravity = Gravity.CENTER_VERTICAL }
+            phone.addView(button(display, false) { selectPhone(device, true) }.apply {
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 isSelected = selected
                 background = ripple(if (selected) SELECTED else SURFACE, if (selected) SELECTED else BORDER)
                 if (selected) setTextColor(ACCENT)
                 contentDescription = if (selected) getString(R.string.f10_selected_phone, display) else display
                 maxLines = 3
-            }, matchButton(6))
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            phone.addView(button(getString(R.string.f10_remove_phone), false) { removePhone(device) }.apply {
+                contentDescription = getString(R.string.f10_remove_phone_description, display)
+                background = ripple(SURFACE, BORDER)
+                setTextColor(MUTED)
+                textSize = 14f
+                minWidth = dp(48)
+                minimumWidth = dp(48)
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+            }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
+            list.addView(phone, matchButton(6))
         }
         phones.addView(list)
+        if (pairedIPhones(includeRemoved = true).any { DiPlayPreferences.isPhoneRemoved(this, it.address) }) {
+            phones.addView(button(getString(R.string.f10_add_phone), false) { choosePhone() }, matchButton(12))
+        }
         phones.addView(tile(getString(R.string.f10_pair_device), R.drawable.ic_drive_pair, false) {
             CarPlayBackgroundSession.stop { runOnUiThread { openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } }
         }.apply { textSize = 16f; setTextColor(ACCENT); background = ripple(SURFACE, BORDER) }, matchButton(12))
@@ -320,12 +334,13 @@ class DiPlayActivity : ComponentActivity() {
         setupError?.let { content.addView(label(it, 16, WARNING).apply { setPadding(0, dp(16), 0, 0) }) }
     }
 
-    private fun pairedIPhones(): List<BluetoothDevice> {
+    private fun pairedIPhones(includeRemoved: Boolean = false): List<BluetoothDevice> {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return emptyList()
         val bonded = runCatching { getSystemService(BluetoothManager::class.java)?.adapter?.bondedDevices.orEmpty() }.getOrDefault(emptySet())
         val selected = DiPlayPreferences.phoneAddress(this)
-        return bonded.filter { it.address.equals(selected, true) ||
-            it.bluetoothClass?.majorDeviceClass != android.bluetooth.BluetoothClass.Device.Major.AUDIO_VIDEO
+        return bonded.filter { (includeRemoved || !DiPlayPreferences.isPhoneRemoved(this, it.address)) &&
+            (it.address.equals(selected, true) ||
+            it.bluetoothClass?.majorDeviceClass != android.bluetooth.BluetoothClass.Device.Major.AUDIO_VIDEO)
         }.sortedWith(compareByDescending<BluetoothDevice> { it.address.equals(selected, true) }
             .thenByDescending { it.name?.contains("iPhone", true) == true }.thenBy { it.name ?: "" })
     }
@@ -1119,7 +1134,7 @@ class DiPlayActivity : ComponentActivity() {
                 .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ -> openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
                 .setNegativeButton(getString(R.string.later), null).show(); return
         }
-        val devices = runCatching { adapter.bondedDevices.sortedBy { it.name ?: "" } }.getOrDefault(emptyList())
+        val devices = pairedIPhones(includeRemoved = true)
         if (devices.isEmpty()) {
             AlertDialog.Builder(this).setTitle(getString(R.string.pair_your_iphone))
                 .setMessage(getString(R.string.on_your_iphone_open_settings_bluetooth_and_pair_with_the_c))
@@ -1153,6 +1168,22 @@ class DiPlayActivity : ComponentActivity() {
                 if (start) connect(true)
             }
         } }
+    }
+
+    private fun removePhone(device: BluetoothDevice) {
+        val selected = device.address.equals(DiPlayPreferences.phoneAddress(this), true)
+        val remove = { runOnUiThread {
+            if (!isFinishing && !isDestroyed) {
+                DiPlayPreferences.removePhone(this, device.address)
+                render()
+                toast(getString(R.string.f10_phone_removed))
+            }
+        } }
+        if (selected) {
+            pendingWireless = false
+            returningToConnect = false
+            CarPlayBackgroundSession.stop { remove() }
+        } else remove()
     }
 
     private fun wirelessHelp() {

@@ -32,6 +32,11 @@
     <string name="f10_disconnect_home">Disconnect and go back</string>
     <string name="f10_wifi_needed">Turn on Wi-Fi to start wireless CarPlay.</string>
     <string name="f10_your_phones">Your phones</string>
+    <string name="f10_remove_phone">Remove</string>
+    <string name="f10_remove_phone_description">Remove %1$s from F10 Play</string>
+    <string name="f10_add_phone">Add phone</string>
+    <string name="f10_phone_removed">Removed from F10 Play. Use Add phone to restore it. Bluetooth pairing is kept.</string>
+    <string name="f10_no_visible_phone">Add a saved phone or pair a new iPhone below.</string>
     <string name="f10_selected_phone">%1$s, selected phone</string>
     <string name="f10_settings_hint">Set up once. Keep everyday controls on the home screen.</string>
     <string name="f10_widgets_language">Widgets &amp; language</string>

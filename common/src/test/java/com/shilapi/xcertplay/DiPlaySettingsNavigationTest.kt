@@ -19,6 +19,40 @@ import org.robolectric.shadows.ShadowAlertDialog
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28, 36])
 class DiPlaySettingsNavigationTest {
+    @Test fun removingAHomePhonePersistsAcrossActivityRestartAndCanBeAddedBack() {
+        val context = RuntimeEnvironment.getApplication()
+        context.getSharedPreferences("diplay", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        DiPlayPreferences.saveAutoConnect(context, false)
+        val adapter = context.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
+        shadowOf(adapter).setEnabled(true)
+        val phone = org.robolectric.shadows.ShadowBluetoothDevice.newInstance("AA:BB:CC:DD:EE:FF")
+        shadowOf(phone).setName("Test iPhone")
+        shadowOf(adapter).setBondedDevices(setOf(phone))
+        if (android.os.Build.VERSION.SDK_INT >= 31) shadowOf(context).grantPermissions(android.Manifest.permission.BLUETOOTH_CONNECT)
+        DiPlayPreferences.savePhone(context, phone.address, "Test iPhone")
+        fun launch() = Robolectric.buildActivity(DiPlayActivity::class.java,
+            Intent(context, DiPlayActivity::class.java).putExtra("page", "home")).setup()
+        val first = launch()
+        try {
+            descendants(first.get().window.decorView).filterIsInstance<android.widget.Button>()
+                .single { it.text.toString() == first.get().getString(R.string.f10_remove_phone) }.performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertNull(DiPlayPreferences.phoneAddress(context))
+            assertTrue(DiPlayPreferences.isPhoneRemoved(context, phone.address))
+            assertEquals(1, adapter.bondedDevices.size)
+        } finally { first.pause().stop().destroy() }
+        val second = launch()
+        try {
+            val texts = descendants(second.get().window.decorView).filterIsInstance<TextView>().toList()
+            assertFalse(texts.any { it.text.toString() == "Test iPhone" })
+            texts.single { it.text.toString() == second.get().getString(R.string.f10_add_phone) }.performClick()
+            ShadowAlertDialog.getLatestAlertDialog().listView.performItemClick(null, 0, 0)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(phone.address, DiPlayPreferences.phoneAddress(context))
+            assertFalse(DiPlayPreferences.isPhoneRemoved(context, phone.address))
+            assertTrue(descendants(second.get().window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "Test iPhone" })
+        } finally { second.pause().stop().destroy() }
+    }
     @Test fun settingsCategoriesKeepControlsSeparateAndBackReturnsToTheMenu() {
         val context = RuntimeEnvironment.getApplication()
         DiPlayPreferences.saveAutoConnect(context, false)
